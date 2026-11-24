@@ -1,9 +1,9 @@
 import { matchers, routes, type Transform, type VercelConfig } from "@vercel/config/v1";
 
-const ROUTER_HOST = "app.t3.codes";
+const ROUTER_HOST = process.env.T3CODE_WEB_ROUTER_HOST?.trim() ?? "";
 const HOSTED_WEB_CHANNEL_COOKIE = "t3code_web_channel";
-const LATEST_ORIGIN = "https://latest.app.t3.codes";
-const NIGHTLY_ORIGIN = "https://nightly.app.t3.codes";
+const LATEST_ORIGIN = process.env.T3CODE_WEB_LATEST_ORIGIN?.trim().replace(/\/+$/u, "") ?? "";
+const NIGHTLY_ORIGIN = process.env.T3CODE_WEB_NIGHTLY_ORIGIN?.trim().replace(/\/+$/u, "") ?? "";
 const CLEAN_CHANNEL_QUERY_TRANSFORMS = [
   {
     type: "request.query",
@@ -51,16 +51,27 @@ export const config: VercelConfig = {
       },
       status: 302,
     },
-    {
-      src: "/(.*)",
-      has: [matchers.host(ROUTER_HOST), matchers.cookie(HOSTED_WEB_CHANNEL_COOKIE, "nightly")],
-      dest: `${NIGHTLY_ORIGIN}/$1`,
-    },
-    {
-      src: "/(.*)",
-      has: [matchers.host(ROUTER_HOST)],
-      dest: `${LATEST_ORIGIN}/$1`,
-    },
+    ...(ROUTER_HOST && NIGHTLY_ORIGIN
+      ? [
+          {
+            src: "/(.*)",
+            has: [
+              matchers.host(ROUTER_HOST),
+              matchers.cookie(HOSTED_WEB_CHANNEL_COOKIE, "nightly"),
+            ],
+            dest: `${NIGHTLY_ORIGIN}/$1`,
+          },
+        ]
+      : []),
+    ...(ROUTER_HOST && LATEST_ORIGIN
+      ? [
+          {
+            src: "/(.*)",
+            has: [matchers.host(ROUTER_HOST)],
+            dest: `${LATEST_ORIGIN}/$1`,
+          },
+        ]
+      : []),
   ],
   rewrites: [
     // Apple fetches it without an extension; the .json file is served as application/json.

@@ -41,6 +41,7 @@ export class DirectEndpoints extends Context.Service<
   {
     readonly resolveAvailable: () => Effect.Effect<ReadonlyArray<ServerDirectEndpoint>>;
     readonly resolve: () => Effect.Effect<ReadonlyArray<ServerDirectEndpoint>>;
+    readonly registerPublicEndpoint: (httpBaseUrl: string) => Effect.Effect<void>;
   }
 >()("t3/environment/DirectEndpoints") {}
 
@@ -139,6 +140,8 @@ export const make = Effect.gen(function* () {
   yield* Effect.forkDetach(onCloudVm);
 
   const servedEndpoint = yield* Ref.make<Option.Option<string>>(Option.none());
+  // Created with the service so a tunnel can advertise its URL before clients read config.
+  const publicEndpoint = yield* Ref.make<Option.Option<string>>(Option.none());
   const resolveAvailable = Effect.fn("DirectEndpoints.resolveAvailable")(function* () {
     const endpoints = [
       ...resolveBoundEndpoints({
@@ -151,6 +154,8 @@ export const make = Effect.gen(function* () {
     ];
     const servedUrl = yield* Ref.get(servedEndpoint);
     if (Option.isSome(servedUrl)) endpoints.push({ kind: "tailnet", httpBaseUrl: servedUrl.value });
+    const publicUrl = yield* Ref.get(publicEndpoint);
+    if (Option.isSome(publicUrl)) endpoints.push({ kind: "public", httpBaseUrl: publicUrl.value });
     return endpoints;
   });
 
@@ -185,6 +190,11 @@ export const make = Effect.gen(function* () {
     resolve: Effect.fn("DirectEndpoints.resolve")(function () {
       return resolve;
     }),
+    registerPublicEndpoint: Effect.fn("DirectEndpoints.registerPublicEndpoint")(
+      function (httpBaseUrl) {
+        return Ref.set(publicEndpoint, Option.some(httpBaseUrl));
+      },
+    ),
   });
 });
 

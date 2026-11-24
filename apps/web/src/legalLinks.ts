@@ -1,1 +1,3 @@
-export const PRIVACY_POLICY_URL = "https://t3.codes/privacy-policy";
+import { PRODUCT_URLS } from "./productUrls";
+
+export const PRIVACY_POLICY_URL = PRODUCT_URLS.privacyUrl;

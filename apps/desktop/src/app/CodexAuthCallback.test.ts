@@ -1,9 +1,12 @@
 // @effect-diagnostics nodeBuiltinImport:off globalFetch:off - Tests exercise the real native loopback listener without an OpenAI account.
 import * as NodeHttp from "node:http";
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { codexAuthDeliveryUrl, readCodexAuthDelivery } from "@t3tools/shared/codexAuthHandoff";
 import { EnvironmentId, ProviderInstanceId } from "@t3tools/contracts";
 import { receiveCodexAuthCallback, cancelCodexAuthCallback } from "./CodexAuthCallback.ts";
+
+beforeEach(() => vi.stubEnv("T3CODE_HOSTED_APP_URL", "https://app.example.com"));
+afterEach(() => vi.unstubAllEnvs());
 
 // Holds every probe socket until all ports are read, so one call never returns the same port twice.
 async function freePorts(count: number) {
@@ -77,7 +80,8 @@ describe("desktop Codex callback helper", () => {
     const expected = callback(authorizationUrl);
     const input = {
       authorizationUrl,
-      returnUrl: "https://app.t3.codes/settings/providers?environmentId=remote-one&instanceId=work",
+      returnUrl:
+        "https://app.example.com/settings/providers?environmentId=remote-one&instanceId=work",
       environmentId: EnvironmentId.make("remote-one"),
       instanceId: ProviderInstanceId.make("work"),
       flowId: "flow-one",
@@ -87,8 +91,12 @@ describe("desktop Codex callback helper", () => {
       expect(response.status).toBe(303);
       const delivery = response.headers.get("location")!;
       expect(new URL(delivery).searchParams.has("code")).toBe(false);
-      expect(readCodexAuthDelivery(delivery)?.callbackUrl).toBe(expected);
-      expect(readCodexAuthDelivery(delivery)?.returnUrl).toBe(input.returnUrl);
+      expect(readCodexAuthDelivery(delivery, "https://app.example.com")?.callbackUrl).toBe(
+        expected,
+      );
+      expect(readCodexAuthDelivery(delivery, "https://app.example.com")?.returnUrl).toBe(
+        input.returnUrl,
+      );
       return true;
     };
     let opening!: Promise<boolean>;

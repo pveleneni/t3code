@@ -10,13 +10,17 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 
+import {
+  githubRepositoryUrl,
+  productUrls,
+  runtimeProductEnvironment,
+} from "@t3tools/contracts/productUrls";
+
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
-import { buildTriageAppPrompt, type TriageSourceClone } from "./triagePrompt.ts";
+import { buildTriageAppPrompt, hostedAppLabel, type TriageSourceClone } from "./triagePrompt.ts";
 import { triageSourceCacheDir, writeTriageSession } from "./triageSession.ts";
-
-const T3CODE_REPOSITORY_URL = "https://github.com/pingdotgg/t3code";
 
 // No tty: a credential prompt would hang until the timeout, so git must fail
 // instead. An empty GIT_ASKPASS also skips core.askPass and SSH_ASKPASS helpers.
@@ -43,7 +47,7 @@ const describeClient = (client: AuthClientPresentationMetadata) =>
     client.appVersion === undefined ? undefined : `version ${client.appVersion}`,
     client.os === undefined ? undefined : `on ${client.os}`,
     client.browser === undefined ? undefined : `in ${client.browser}`,
-    client.webDeployment === "hosted" ? "(app.t3.codes)" : undefined,
+    client.webDeployment === "hosted" ? hostedAppLabel(runtimeProductEnvironment()) : undefined,
   ]
     .filter((part) => part !== undefined)
     .join(" ");
@@ -71,6 +75,9 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const sourceDir = triageSourceCacheDir(config.baseDir, path);
+  const repositoryUrl = githubRepositoryUrl(
+    productUrls(runtimeProductEnvironment()).githubRepository,
+  );
   // Beside the cache, not in it: the playbook has agents prune the cache, and a
   // clone in progress must not look like a stale entry. Same filesystem, so the
   // finished clone moves in with a rename.
@@ -88,18 +95,16 @@ const make = Effect.gen(function* () {
 
   // Fetches the exact commit `ls-remote` resolved, so the folder the session
   // names is the one that appears even when main moves meanwhile.
-  const cloneSource = Effect.fn("TriageService.cloneSource")(function* (commit: string) {
+  const cloneSource = Effect.fn("TriageService.cloneSource")(function* (
+    commit: string,
+    repositoryUrl: string,
+  ) {
     yield* fs.makeDirectory(stagingDir, { recursive: true });
     const staging = yield* fs.makeTempDirectory({ directory: stagingDir, prefix: "clone-" });
     const directory = path.join(sourceDir, commit);
     yield* Effect.gen(function* () {
       yield* runGit("initSource", staging, ["init", "--quiet"], 10_000);
-      yield* runGit(
-        "addSourceRemote",
-        staging,
-        ["remote", "add", "origin", T3CODE_REPOSITORY_URL],
-        10_000,
-      );
+      yield* runGit("addSourceRemote", staging, ["remote", "add", "origin", repositoryUrl], 10_000);
       yield* runGit(
         "fetchSource",
         staging,
@@ -124,13 +129,13 @@ const make = Effect.gen(function* () {
   // Release tags never move, so one lookup serves every later session. Builds
   // with no tag track main, which does move, so they look it up each time.
   let releaseSource: { readonly ref: string; readonly commit: string } | undefined;
-  const resolveSource = Effect.fn("TriageService.resolveSource")(function* () {
+  const resolveSource = Effect.fn("TriageService.resolveSource")(function* (repositoryUrl: string) {
     if (releaseSource !== undefined) return releaseSource;
     const tag = `refs/tags/v${serverVersion}`;
     const listed = yield* runGit(
       "resolveSourceRef",
       sourceDir,
-      ["ls-remote", T3CODE_REPOSITORY_URL, tag, `${tag}^{}`, "refs/heads/main"],
+      ["ls-remote", repositoryUrl, tag, `${tag}^{}`, "refs/heads/main"],
       // Triage still starts without source; a dead network should not stall it.
       5_000,
     );
@@ -146,8 +151,15 @@ const make = Effect.gen(function* () {
   // the agent finds and reuses this clone instead of making another. The folder
   // appears only once the clone is complete.
   const startSourceClone = Effect.fn("TriageService.startSourceClone")(function* () {
+    if (repositoryUrl === undefined) {
+      return {
+        _tag: "failed",
+        serverVersion,
+        reason: "T3CODE_GITHUB_REPOSITORY is not configured, so the source cannot be cloned.",
+      } satisfies TriageSourceClone;
+    }
     yield* fs.makeDirectory(sourceDir, { recursive: true });
-    const source = yield* resolveSource();
+    const source = yield* resolveSource(repositoryUrl);
     if (source === undefined) {
       return {
         _tag: "failed",
@@ -176,7 +188,7 @@ const make = Effect.gen(function* () {
     }
     if (!cloning.has(source.commit)) {
       cloning.add(source.commit);
-      yield* cloneSource(source.commit).pipe(
+      yield* cloneSource(source.commit, repositoryUrl).pipe(
         Effect.ignoreCause({ log: true }),
         Effect.ensuring(Effect.sync(() => cloning.delete(source.commit))),
         Effect.forkIn(serviceScope),

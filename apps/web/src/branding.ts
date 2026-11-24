@@ -4,6 +4,7 @@ import {
   resolveHostedAppChannelLabel,
   resolveWebAppStageLabel,
 } from "./branding.logic";
+import { PRODUCT_URLS } from "./productUrls";
 
 function readInjectedDesktopAppBranding(): DesktopAppBranding | null {
   if (typeof window === "undefined") {
@@ -30,6 +31,6 @@ export const APP_DISPLAY_NAME =
   injectedDesktopAppBranding?.displayName ??
   formatAppDisplayName({ baseName: APP_BASE_NAME, stageLabel: APP_STAGE_LABEL });
 export const APP_VERSION = import.meta.env.APP_VERSION || "0.0.0";
-export const DESKTOP_DOWNLOAD_URL = "https://t3.codes/download";
-// Redirects to the App Store or Google Play to match the phone that opens it.
-export const MOBILE_APP_URL = "https://t3.codes/mobile";
+export const DESKTOP_DOWNLOAD_URL = PRODUCT_URLS.downloadUrl;
+// Forks point this at their own download page when one is configured.
+export const MOBILE_APP_URL = PRODUCT_URLS.downloadUrl;

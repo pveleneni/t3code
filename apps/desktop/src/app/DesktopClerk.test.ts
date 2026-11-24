@@ -14,6 +14,7 @@ import { afterAll, beforeEach, vi } from "vite-plus/test";
 
 const clerkStateDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-desktop-clerk-"));
 afterAll(() => {
+  vi.unstubAllEnvs();
   NodeFS.rmSync(clerkStateDir, { recursive: true, force: true });
 });
 
@@ -112,6 +113,7 @@ const layerDesktopClerk = (
 
 describe("DesktopClerk", () => {
   beforeEach(() => {
+    vi.stubEnv("T3CODE_HOSTED_APP_URL", "https://app.example.com");
     createClerkBridgeMock.mockReset();
     requestSingleInstanceLockMock.mockReset().mockReturnValue(true);
     storageMock.mockReset();
@@ -366,7 +368,7 @@ it.effect.each(["startup", "open-url", "early-second-instance"] as const)(
       }).toString();
       const request = {
         authorizationUrl: authorize.toString(),
-        returnUrl: "https://app.t3.codes/welcome#agents:remote-one",
+        returnUrl: "https://app.example.com/welcome#agents:remote-one",
         environmentId: EnvironmentId.make("remote-one"),
         instanceId: ProviderInstanceId.make("work"),
         flowId: "flow-one",
@@ -409,7 +411,10 @@ it.effect.each(["startup", "open-url", "early-second-instance"] as const)(
           listeners.get("open-url")!(event, link);
           assert.strictEqual(event.preventDefault.mock.calls.length, 1);
         }
-        const delivery = readCodexAuthDelivery(yield* Effect.promise(() => delivered.promise));
+        const delivery = readCodexAuthDelivery(
+          yield* Effect.promise(() => delivered.promise),
+          "https://app.example.com",
+        );
         assert.strictEqual(delivery?.environmentId, request.environmentId);
         assert.strictEqual(delivery?.instanceId, request.instanceId);
         assert.strictEqual(delivery?.flowId, request.flowId);

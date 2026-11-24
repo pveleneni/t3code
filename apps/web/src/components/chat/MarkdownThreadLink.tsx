@@ -134,11 +134,12 @@ export function MarkdownThreadLink(props: {
   }
   const ref = resolved?.ref ?? writtenRef;
   const title = resolved?.metadata.title.trim() || props.label || gt("Thread");
+  const copyMarkdown = formatHostedThreadLink(ref, title, configuredHostedAppUrl());
   return (
     <ThreadContextChip
       record={{ ...ref, title }}
       projectId={resolved?.metadata.projectId ?? null}
-      copyMarkdown={formatHostedThreadLink(ref, title, configuredHostedAppUrl())}
+      {...(copyMarkdown ? { copyMarkdown } : {})}
     />
   );
 }

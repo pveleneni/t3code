@@ -5,10 +5,16 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
+import { docsPageUrl, productUrls, runtimeProductEnvironment } from "@t3tools/shared/productUrls";
+
 import { relayResourceNameForStage } from "./deploymentConfig.ts";
+import { RelayDeploymentConfig } from "./zone.ts";
 
 const RUNBOOK_URL =
-  "https://github.com/pingdotgg/t3code/blob/main/docs/operations/05_relay-observability.md#alerts";
+  docsPageUrl(
+    productUrls(runtimeProductEnvironment()).docsBaseUrl,
+    "operations/05_relay-observability.md#alerts",
+  ) ?? "Set T3CODE_DOCS_BASE_URL for the alerts runbook.";
 
 const LINK_ROUTE = `"/v1/client/environment-links"`;
 const TUNNEL_ROUTES = `"/v1/environments/:environmentId/tunnel", "/v1/environments/:environmentId/tunnel/recovery"`;
@@ -224,7 +230,10 @@ const timeSeries = (id: string, name: string, apl: string): QueryChart => ({
   query: { apl },
 });
 
-const relayDashboardCharts = (dataset: string): ReadonlyArray<QueryChart> => {
+const relayDashboardCharts = (
+  dataset: string,
+  relayEnvironmentPrefix: string,
+): ReadonlyArray<QueryChart> => {
   const source = `['${dataset}']`;
   const linkRequests = `${source}\n| where kind == "server" and ['attributes.http.request.method'] == "POST" and ['attributes.http.route'] == ${LINK_ROUTE}`;
   const tunnelRequests = `${source}\n| where kind == "server" and ['attributes.http.request.method'] == "POST" and ['attributes.http.route'] in (${TUNNEL_ROUTES})`;
@@ -330,7 +339,7 @@ const relayDashboardCharts = (dataset: string): ReadonlyArray<QueryChart> => {
           `    name == "ConnectionDriver.checkRoute", "0. Direct route check, before any relay fallback",`,
           `    name == "relay.connection.cloudSessionToken.resolve", "1. Clerk session token",`,
           `    name == "clientRuntime.managedRelay.exchangeAccessToken", "2. Relay token exchange",`,
-          `    kind == "client" and url startswith "https://relay.t3.codes/v1/environments/" and url endswith "/connect", "3. Relay connect, minting a host credential",`,
+          `    kind == "client" and url startswith "${relayEnvironmentPrefix}" and url endswith "/connect", "3. Relay connect, minting a host credential",`,
           `    name == "environment.authorization.descriptor", "4. Host descriptor",`,
           `    name == "environment.authorization.accessToken.exchange", "5. Host token exchange",`,
           `    name == "clientRuntime.connection.remote.createDpopSocketUrl", "6. Socket ticket",`,
@@ -365,6 +374,11 @@ export const notifierConfig = (name: string) =>
  */
 export const RelayMonitoring = Effect.fn("RelayMonitoring")(function* (traces: Axiom.Dataset) {
   const { stage } = yield* Alchemy.Stack;
+  const { relayPublicOrigin } = yield* RelayDeploymentConfig;
+  const relayEnvironmentPrefix = URL.canParse(relayPublicOrigin)
+    ? `${new URL(relayPublicOrigin).origin}/v1/environments/`
+    : // A malformed override still produces a usable, T3-free phase query.
+      "/v1/environments/";
   const page = yield* notifierConfig("RELAY_ALERT_NOTIFIER_ID");
   if (Option.isNone(page)) return;
   const notifiers: Record<Severity, Option.Option<string>> = {
@@ -390,7 +404,7 @@ export const RelayMonitoring = Effect.fn("RelayMonitoring")(function* (traces: A
 
   yield* Axiom.Dashboard("RelayHealthDashboard", {
     dashboard: Output.map(traces.name, (dataset) => {
-      const charts = relayDashboardCharts(dataset);
+      const charts = relayDashboardCharts(dataset, relayEnvironmentPrefix);
       return {
         name: relayResourceNameForStage("t3-code-relay-health", stage),
         // Shared with the whole org. An empty owner only means that for API

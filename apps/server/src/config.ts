@@ -53,7 +53,6 @@ export interface ServerDerivedPaths {
   readonly providerLogsDir: string;
   readonly providerEventLogPath: string;
   readonly terminalLogsDir: string;
-  readonly anonymousIdPath: string;
   readonly environmentIdPath: string;
   readonly serverRuntimeStatePath: string;
   readonly secretsDir: string;
@@ -124,7 +123,6 @@ export const make = (config: ServerConfig["Service"]) => ServerConfig.of(config)
 
 export const otlpResource = (
   config: Pick<ServerConfig["Service"], "mode" | "otelEnvironment">,
-  hostName: string,
 ) => ({
   serviceName: "t3code-server",
   serviceVersion: packageJson.version,
@@ -134,7 +132,7 @@ export const otlpResource = (
     "t3code.server.managed_by": config.mode === "desktop" ? "desktop" : "standalone",
     "service.instance.id": processServiceInstanceId(config.otelEnvironment.resourceAttributes),
     ...releaseResourceAttributes(telemetryChannel, config.otelEnvironment.resourceAttributes),
-    "host.name": config.otelEnvironment.resourceAttributes["host.name"] || hostName,
+    "host.name": config.otelEnvironment.resourceAttributes["host.name"] || "t3code-fork",
     ...nodeProcessRuntimeAttributes(),
   },
 });
@@ -173,7 +171,6 @@ export const deriveServerPaths = Effect.fn(function* (
     providerLogsDir,
     providerEventLogPath: join(providerLogsDir, "events.log"),
     terminalLogsDir: join(logsDir, "terminals"),
-    anonymousIdPath: join(stateDir, "anonymous-id"),
     environmentIdPath: join(stateDir, "environment-id"),
     serverRuntimeStatePath: join(stateDir, "server-runtime.json"),
     secretsDir: join(stateDir, "secrets"),
@@ -200,7 +197,6 @@ export const ensureServerDirectories = Effect.fn(function* (derivedPaths: Server
       fs.makeDirectory(path.dirname(derivedPaths.keybindingsConfigPath), { recursive: true }),
       fs.makeDirectory(path.dirname(derivedPaths.settingsPath), { recursive: true }),
       fs.makeDirectory(derivedPaths.providerStatusCacheDir, { recursive: true }),
-      fs.makeDirectory(path.dirname(derivedPaths.anonymousIdPath), { recursive: true }),
       fs.makeDirectory(path.dirname(derivedPaths.serverRuntimeStatePath), { recursive: true }),
     ],
     { concurrency: "unbounded" },

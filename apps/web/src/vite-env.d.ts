@@ -15,6 +15,16 @@ interface ImportMetaEnv {
   readonly VITE_RELAY_OTLP_TRACES_DATASET: string;
   readonly VITE_RELAY_OTLP_TRACES_TOKEN: string;
   readonly T3CODE_DESKTOP_UPDATE_REPOSITORY: string;
+  readonly T3CODE_GITHUB_REPOSITORY: string;
+  readonly T3CODE_RELEASE_BASE_URL: string;
+  readonly T3CODE_RELEASE_REPOSITORY: string;
+  readonly T3CODE_DOCS_BASE_URL: string;
+  readonly T3CODE_INSTALL_URL: string;
+  readonly T3CODE_INSTALL_PS1_URL: string;
+  readonly T3CODE_DOWNLOAD_URL: string;
+  readonly T3CODE_PRIVACY_URL: string;
+  readonly T3CODE_ISSUE_URL: string;
+  readonly T3CODE_MODEL_MANIFEST_URL: string;
   readonly APP_VERSION: string;
 }
 

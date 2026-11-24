@@ -5,6 +5,8 @@ import {
 import { normalizeSecureRelayUrl } from "@t3tools/shared/relayUrl";
 import * as Schema from "effect/Schema";
 
+import { configuredHostedAppUrl } from "../hostedPairing.ts";
+
 export class CloudPublicConfigMissingError extends Schema.TaggedError<CloudPublicConfigMissingError>()(
   "CloudPublicConfigMissingError",
   {
@@ -20,6 +22,7 @@ export interface CloudPublicConfig {
   readonly clerkPublishableKey: string | null;
   readonly clerkJwtTemplate: string | null;
   readonly relayUrl: string | null;
+  readonly hostedAppUrl: string | null;
   readonly relayTracing: {
     readonly tracesUrl: string | null;
     readonly tracesDataset: string | null;
@@ -49,6 +52,7 @@ export function resolveCloudPublicConfig(): CloudPublicConfig {
     relayUrl: normalizeSecureRelayUrl(
       (import.meta.env.VITE_T3CODE_RELAY_URL as string | undefined) ?? "",
     ),
+    hostedAppUrl: configuredHostedAppUrl() || null,
     relayTracing: {
       tracesUrl: normalizeSecureUrl(
         (import.meta.env.VITE_RELAY_OTLP_TRACES_URL as string | undefined) ?? "",
@@ -71,18 +75,8 @@ export function relayTelemetryEnabled(): boolean | null {
 }
 
 export function resolveRelayTracingConfig() {
-  // The relay exporter is created during module initialization, so this must be synchronous.
-  if (relayTelemetryEnabled() === false) {
-    return null;
-  }
-  const { relayTracing } = resolveCloudPublicConfig();
-  return relayTracing.tracesUrl && relayTracing.tracesDataset && relayTracing.tracesToken
-    ? {
-        tracesUrl: relayTracing.tracesUrl,
-        tracesDataset: relayTracing.tracesDataset,
-        tracesToken: relayTracing.tracesToken,
-      }
-    : null;
+  // This fork never exports relay traces to a third-party observability host.
+  return null;
 }
 
 export function hasCloudPublicConfig(): boolean {

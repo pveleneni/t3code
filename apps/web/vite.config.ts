@@ -48,10 +48,30 @@ const configuredReleaseChannel =
   process.env.T3CODE_BUILT_DEV === "1" ? "dev" : process.env.VITE_RELEASE_CHANNEL?.trim() || "";
 const configuredDesktopUpdateRepository =
   process.env.T3CODE_DESKTOP_UPDATE_REPOSITORY?.trim() ||
+  process.env.T3CODE_GITHUB_REPOSITORY?.trim() ||
   process.env.GITHUB_REPOSITORY?.trim() ||
   "";
+const productUrlEnvNames = [
+  "T3CODE_GITHUB_REPOSITORY",
+  "T3CODE_RELEASE_BASE_URL",
+  "T3CODE_RELEASE_REPOSITORY",
+  "T3CODE_DOCS_BASE_URL",
+  "T3CODE_INSTALL_URL",
+  "T3CODE_INSTALL_PS1_URL",
+  "T3CODE_DOWNLOAD_URL",
+  "T3CODE_PRIVACY_URL",
+  "T3CODE_ISSUE_URL",
+  "T3CODE_MODEL_MANIFEST_URL",
+] as const;
+const productUrlDefine = Object.fromEntries(
+  productUrlEnvNames.map((name) => [
+    `import.meta.env.${name}`,
+    JSON.stringify(process.env[name] ?? ""),
+  ]),
+);
 const configuredHostedAppUrl = (() => {
-  const explicitHostedAppUrl = process.env.VITE_HOSTED_APP_URL?.trim();
+  const explicitHostedAppUrl =
+    process.env.VITE_HOSTED_APP_URL?.trim() || process.env.T3CODE_HOSTED_APP_URL?.trim();
   if (explicitHostedAppUrl) {
     return explicitHostedAppUrl;
   }
@@ -372,6 +392,7 @@ export default defineConfig(({ command }) => {
       "import.meta.env.T3CODE_DESKTOP_UPDATE_REPOSITORY": JSON.stringify(
         configuredDesktopUpdateRepository,
       ),
+      ...productUrlDefine,
       "import.meta.env.VITE_RELEASE_CHANNEL": JSON.stringify(configuredReleaseChannel),
       "import.meta.env.APP_VERSION": JSON.stringify(configuredAppVersion),
     },

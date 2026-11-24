@@ -58,7 +58,7 @@ it.effect("authenticates each release page until the requested channel is found"
     const httpClient = HttpClient.make((request) => {
       const url = new URL(request.url);
       assert.equal(url.origin, "https://api.github.com");
-      assert.equal(url.pathname, "/repos/pingdotgg/t3code/releases");
+      assert.equal(url.pathname, "/repos/example/t3code/releases");
       assert.equal(request.headers.accept, "application/vnd.github+json");
       assert.equal(request.headers.authorization, "Bearer gh-token");
       const page = url.searchParams.get("page") ?? "";
@@ -67,7 +67,10 @@ it.effect("authenticates each release page until the requested channel is found"
       return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json([{ tag_name }])));
     });
     const version = yield* resolveNewestVersion("stable").pipe(
-      Effect.provideService(HostProcess.Environment, { GH_TOKEN: "gh-token" }),
+      Effect.provideService(HostProcess.Environment, {
+        GH_TOKEN: "gh-token",
+        T3CODE_RELEASE_REPOSITORY: "example/t3code",
+      }),
       Effect.provideService(HttpClient.HttpClient, httpClient),
     );
     assert.equal(version, "1.2.3");

@@ -194,7 +194,6 @@ export const make = Effect.gen(function* () {
       });
       return id;
     });
-  const hostname = yield* HostProcess.Hostname;
   const readerContext = yield* Effect.context<BuiltInUsageReadersEnv>();
 
   const fileCache: ScanCache = new Map();
@@ -225,37 +224,7 @@ export const make = Effect.gen(function* () {
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(Path.Path, path),
     );
-  const hostIdPath = path.join(config.baseDir, "usage-host-id");
-  const explicitHostId = hostEnvironment["T3CODE_HOST_ID"]?.trim();
-  const hostId =
-    explicitHostId ||
-    (yield* fileSystem.readFileString(hostIdPath).pipe(
-      Effect.catchIf(
-        (error) => error.reason._tag === "NotFound",
-        () =>
-          Effect.scoped(
-            Effect.gen(function* () {
-              yield* fileSystem.makeDirectory(config.baseDir, { recursive: true });
-              const tempDirectory = yield* fileSystem.makeTempDirectoryScoped({
-                directory: config.baseDir,
-                prefix: "usage-host-id.",
-              });
-              const tempFile = path.join(tempDirectory, "identity");
-              yield* fileSystem.writeFileString(tempFile, `${hostname}\n`);
-              // Publish complete contents without replacing another initializer's identity.
-              yield* fileSystem.link(tempFile, hostIdPath).pipe(
-                Effect.catchIf(
-                  (error) => error.reason._tag === "AlreadyExists",
-                  () => Effect.void,
-                ),
-              );
-              return yield* fileSystem.readFileString(hostIdPath);
-            }),
-          ),
-      ),
-      Effect.map((value) => value.trim() || hostname),
-      Effect.orElseSucceed(() => hostname),
-    ));
+  const hostId = "t3code-fork";
   let rates: RateTable = new Map();
   let ratesFetchedAtMs: number | null = null;
   let ratesLastFailedAtMs: number | null = null;

@@ -6,7 +6,6 @@ import {
   processServiceInstanceId,
   type SignalExport,
 } from "@t3tools/shared/observability";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as SharedObservability from "@t3tools/shared/observability";
 import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
 import { releaseChannelOf, releaseResourceAttributes } from "@t3tools/shared/releaseResource";
@@ -619,7 +618,7 @@ const layerTelemetry = Layer.unwrap(
           environment.isDevelopment ? "dev" : releaseChannelOf(serviceVersion),
           endpoints.resourceAttributes,
         ),
-        "host.name": endpoints.resourceAttributes["host.name"] || (yield* HostProcess.Hostname),
+        "host.name": endpoints.resourceAttributes["host.name"] || "t3code-fork",
         ...nodeProcessRuntimeAttributes(),
       },
     };

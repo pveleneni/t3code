@@ -140,11 +140,26 @@ describe("presentConnectionDiagnosis", () => {
     expect(diagnosis?.headline).not.toContain("did not answer");
     expect(diagnosis?.hops.find((hop) => hop.result === "failed")?.hop).toBe("device");
     expect(diagnosis?.steps.join(" ")).not.toContain("Mac mini");
-    expect(diagnosis?.moreInfoUrl).toContain("sign-in-account-or-link-problems");
+    expect(diagnosis?.moreInfoUrl).toBeNull();
     // A host with a LAN route as well uses the direct route, still authorized through T3 Connect.
-    expect(diagnose(backoff(failure), "direct")?.moreInfoUrl).toContain(
-      "sign-in-account-or-link-problems",
-    );
+    expect(diagnose(backoff(failure), "direct")?.moreInfoUrl).toBeNull();
+  });
+
+  it("uses the configured docs base for help links", () => {
+    const previous = process.env.T3CODE_DOCS_BASE_URL;
+    process.env.T3CODE_DOCS_BASE_URL = "https://docs.example.com";
+    try {
+      const failure = new ConnectionTransientError({
+        reason: "session-pending",
+        detail: "Waiting for the T3 Connect sign-in to load.",
+      });
+      expect(diagnose(backoff(failure))?.moreInfoUrl).toBe(
+        "https://docs.example.com/user/t3-connect-troubleshooting.md#sign-in-account-or-link-problems",
+      );
+    } finally {
+      if (previous === undefined) delete process.env.T3CODE_DOCS_BASE_URL;
+      else process.env.T3CODE_DOCS_BASE_URL = previous;
+    }
   });
 
   it("asks for approval on the host instead of reporting it unreachable", () => {

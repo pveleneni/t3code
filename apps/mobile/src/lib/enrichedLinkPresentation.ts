@@ -18,6 +18,7 @@ import {
 } from "@t3tools/shared/composerContextReferences";
 import { hasThreadLinks, parseThreadLinkHref } from "@t3tools/shared/threadLinks";
 import { EXTENSIONLESS_FILE_NAMES } from "@t3tools/shared/markdownLinks";
+import { configuredHostedAppUrl } from "./hostedAppUrl";
 
 export function enrichedContextLinkPresentation(
   href: string,
@@ -41,7 +42,7 @@ export function enrichedContextLinkPresentation(
 export function enrichedThreadLinkPresentation(
   href: string,
 ): { accent?: string; icon: ContextChipIconRef } | undefined {
-  if (!parseThreadLinkHref(href)) return undefined;
+  if (!parseThreadLinkHref(href, configuredHostedAppUrl())) return undefined;
   const presentation = contextChipPresentation("thread");
   return {
     ...(presentation.accent ? { accent: presentation.accent } : {}),
@@ -62,9 +63,10 @@ export function threadChipTargets(
   records?: ReadonlyArray<ComposerContextRecord>,
 ): ReadonlyArray<ThreadChipTarget> {
   const targets = new Map<string, ThreadChipTarget>();
-  if (hasThreadLinks(markdown)) {
+  const hostedAppUrl = configuredHostedAppUrl();
+  if (hasThreadLinks(markdown, hostedAppUrl)) {
     for (const [, href = ""] of markdown.matchAll(/\]\(<?(t3-thread:\/\/v[12]\/[^\s>)]+)>?\)/g)) {
-      const link = parseThreadLinkHref(href);
+      const link = parseThreadLinkHref(href, hostedAppUrl);
       if (link) {
         targets.set(href, {
           href,

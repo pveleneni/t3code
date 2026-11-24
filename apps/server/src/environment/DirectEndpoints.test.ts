@@ -415,4 +415,16 @@ describe("DirectEndpoints Tailscale Serve", () => {
       expect(yield* resolveWithServe(502)).toEqual([]);
     }),
   );
+
+  effectIt.effect("advertises a registered public endpoint before and after validation", () =>
+    Effect.gen(function* () {
+      const service = yield* DirectEndpoints.make.pipe(
+        Effect.provide(Layer.mergeAll(layerServeConfig(), layerTailscaleUp, layerServeProbe(200))),
+      );
+      const publicEndpoint = { kind: "public", httpBaseUrl: "https://t3.example.com/" };
+      yield* service.registerPublicEndpoint(publicEndpoint.httpBaseUrl);
+      expect(yield* service.resolveAvailable()).toContainEqual(publicEndpoint);
+      expect(yield* service.resolve()).toContainEqual(publicEndpoint);
+    }),
+  );
 });

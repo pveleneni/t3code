@@ -1,8 +1,37 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { cliArchiveTarCommand, newestCliReleaseVersion, parseChecksums } from "./cliRelease.ts";
+import {
+  cliArchiveTarCommand,
+  cliReleaseDownloadBaseUrl,
+  cliReleaseIndexPageUrl,
+  cliReleasesPageUrl,
+  newestCliReleaseVersion,
+  parseChecksums,
+} from "./cliRelease.ts";
 
 describe("cliRelease", () => {
+  it("leaves release URLs unset when nothing is configured", () => {
+    expect(cliReleasesPageUrl({})).toBeUndefined();
+    expect(cliReleaseIndexPageUrl(1, {})).toBeNull();
+    expect(() => cliReleaseDownloadBaseUrl("1.0.0", undefined, {})).toThrow(
+      "T3CODE_RELEASE_BASE_URL",
+    );
+  });
+
+  it("uses configured release settings", () => {
+    expect(cliReleasesPageUrl({ T3CODE_RELEASE_REPOSITORY: "example/t3code" })).toBe(
+      "https://github.com/example/t3code/releases",
+    );
+    expect(cliReleaseIndexPageUrl(2, { T3CODE_GITHUB_REPOSITORY: "example/t3code" })).toBe(
+      "https://api.github.com/repos/example/t3code/releases?per_page=100&page=2",
+    );
+    expect(
+      cliReleaseDownloadBaseUrl("1.0.0", undefined, {
+        T3CODE_RELEASE_BASE_URL: "https://mirror.example.com/releases/download/",
+      }),
+    ).toBe("https://mirror.example.com/releases/download/v1.0.0");
+  });
+
   it("parses sha256sum output including binary-mode markers", () => {
     const checksums = parseChecksums(
       [

@@ -1,7 +1,7 @@
 # Installs the T3 Code CLI from a GitHub Release archive on Windows. Needs
 # only PowerShell 5.1+; no Node, npm, or compiler.
 #
-#   irm https://t3.codes/install.ps1 | iex
+#   irm "$env:T3CODE_INSTALL_PS1_URL" | iex
 #
 # Environment:
 #   T3CODE_CHANNEL           release train to follow: stable, nightly, or preview
@@ -9,15 +9,17 @@
 #   T3CODE_VERSION           exact version to install (overrides T3CODE_CHANNEL)
 #   T3CODE_HOME              T3 home directory (default: ~\.t3)
 #   T3CODE_INSTALL_BIN_DIR   where t3.exe is linked (default: ~\.local\bin)
-#   T3CODE_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
+#   T3CODE_RELEASE_BASE_URL  mirror for releases/download
+#   T3CODE_RELEASE_REPOSITORY  GitHub owner/repo used for release lookup
+#   T3CODE_GITHUB_REPOSITORY   fallback when no release repository is set
 #
 # The archive is unpacked into $T3CODE_HOME\runtime\versions\<version>, the
 # same layout `t3 service install` uses, so the service reuses this download.
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$repo = "pingdotgg/t3code"
-$baseUrl = if ($env:T3CODE_RELEASE_BASE_URL) { $env:T3CODE_RELEASE_BASE_URL.TrimEnd("/") } else { "https://github.com/$repo/releases/download" }
+$repo = if ($env:T3CODE_RELEASE_REPOSITORY) { $env:T3CODE_RELEASE_REPOSITORY } elseif ($env:T3CODE_GITHUB_REPOSITORY) { $env:T3CODE_GITHUB_REPOSITORY } else { "" }
+$baseUrl = if ($env:T3CODE_RELEASE_BASE_URL) { $env:T3CODE_RELEASE_BASE_URL.TrimEnd("/") } elseif ($repo) { "https://github.com/$repo/releases/download" } else { "" }
 $t3Home = if ($env:T3CODE_HOME) { $env:T3CODE_HOME } else { Join-Path $HOME ".t3" }
 $binDir = if ($env:T3CODE_INSTALL_BIN_DIR) { $env:T3CODE_INSTALL_BIN_DIR } else { Join-Path $HOME ".local\bin" }
 # Absolute, so PATH never gets a folder that changes with the working directory.
@@ -27,6 +29,8 @@ function Fail([string] $message) {
   Write-Error "t3 install: $message"
   exit 1
 }
+
+if (-not $baseUrl) { Fail "set T3CODE_RELEASE_BASE_URL or T3CODE_RELEASE_REPOSITORY before installing" }
 
 $terminal = -not [Console]::IsErrorRedirected -and $env:TERM -ne "dumb"
 $interactive = $terminal -and $Host.UI.SupportsVirtualTerminal
@@ -147,6 +151,7 @@ $arch = switch ($rawArch) {
 $channel = if ($env:T3CODE_CHANNEL) { $env:T3CODE_CHANNEL } else { "stable" }
 $version = $env:T3CODE_VERSION
 if (-not $version) {
+  if (-not $repo) { Fail "set T3CODE_VERSION or T3CODE_RELEASE_REPOSITORY to choose a release" }
   $tagPattern = switch ($channel) {
     "stable" { '^v\d+\.\d+\.\d+$' }
     "nightly" { '^v\d+\.\d+\.\d+-nightly\.\d+\.\d+$' }

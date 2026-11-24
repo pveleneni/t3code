@@ -1,9 +1,11 @@
 import { type EnvironmentId, type WorkflowRunReference } from "@t3tools/contracts";
+import { docsPageUrl } from "@t3tools/contracts/productUrls";
 import { msg, T, useGT, useMessages } from "gt-react";
 import { WorkflowIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { cn } from "../../lib/utils";
+import { PRODUCT_URLS } from "../../productUrls";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { Button } from "../ui/button";
@@ -33,7 +35,7 @@ import {
   workflowRunInvolves,
 } from "@t3tools/client-runtime/workflows";
 
-const WORKFLOWS_GUIDE_URL = "https://github.com/pingdotgg/t3code/blob/main/docs/user/workflows.md";
+const WORKFLOWS_GUIDE_URL = docsPageUrl(PRODUCT_URLS.docsBaseUrl, "user/workflows.md");
 const EVERY_WORKFLOW = "";
 const TABS: ReadonlyArray<{ readonly value: WorkflowListTab; readonly label: string }> = [
   {
@@ -175,15 +177,20 @@ export function WorkflowRunsView({
             >
               Definitions
             </button>
-            , or ask an agent to.{" "}
-            <a
-              href={WORKFLOWS_GUIDE_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="underline underline-offset-2 hover:text-foreground"
-            >
-              Read the guide
-            </a>
+            , or ask an agent to.
+            {WORKFLOWS_GUIDE_URL ? (
+              <>
+                {" "}
+                <a
+                  href={WORKFLOWS_GUIDE_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  Read the guide
+                </a>
+              </>
+            ) : null}
           </T>
         }
       />,

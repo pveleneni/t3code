@@ -1,3 +1,4 @@
+import { isLoopbackHost } from "./preview.ts";
 import { readHashParams } from "./remote.ts";
 
 const CONNECT_AUTH_STATE_PARAM = "state";
@@ -7,7 +8,34 @@ const CONNECT_LOOPBACK_CALLBACK_PATH = "/callback";
 
 const CONNECT_AUTHORIZE_PATH = "/connect";
 
-export const DEFAULT_HOSTED_APP_URL = "https://app.t3.codes";
+/** Accepts only an HTTPS origin, or an HTTP loopback origin for local development. */
+export function normalizeHostedAppOrigin(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    const loopbackHttp = url.protocol === "http:" && isLoopbackHost(url.hostname);
+    if (
+      (url.protocol !== "https:" && !loopbackHttp) ||
+      url.pathname !== "/" ||
+      url.search !== "" ||
+      url.hash !== ""
+    ) {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+export function configuredHostedAppOrigin(
+  env: Readonly<Record<string, string | undefined>> = typeof process === "undefined"
+    ? {}
+    : process.env,
+): string | null {
+  return normalizeHostedAppOrigin(env.T3CODE_HOSTED_APP_URL);
+}
 
 export const CONNECT_OAUTH_SCOPES = ["openid", "profile", "email", "offline_access"] as const;
 

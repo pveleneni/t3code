@@ -10,7 +10,6 @@ import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import packageJson from "../../package.json" with { type: "json" };
@@ -184,7 +183,6 @@ const makeIdentity = Effect.gen(function* () {
 
 /** @public */
 export const make = Effect.gen(function* () {
-  const path = yield* Path.Path;
   const serverConfig = yield* ServerConfig.ServerConfig;
   const secrets = yield* ServerSecretStore.ServerSecretStore;
   const identity = yield* ServerEnvironmentIdentity;
@@ -192,8 +190,7 @@ export const make = Effect.gen(function* () {
   const hostArchitecture = yield* HostProcess.Architecture;
   const hostLibc = hostPlatform === "linux" ? yield* HostProcess.LinuxLibc : undefined;
   const environmentId = yield* identity.getEnvironmentId;
-  const cwdBaseName = path.basename(serverConfig.cwd).trim();
-  const label = yield* resolveServerEnvironmentLabel({ cwdBaseName });
+  const label = yield* resolveServerEnvironmentLabel();
   const machine = yield* detectServerEnvironmentMachineKind();
   const launcher = yield* resolveServiceLauncherMode();
   const serverSelfUpdate = resolveServerSelfUpdateCapability({
