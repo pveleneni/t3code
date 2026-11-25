@@ -72,3 +72,5 @@ anything.
 - [03 · Release](./operations/03_release.md)
 - [04 · Observability](./operations/04_observability.md)
 - [05 · Relay observability](./operations/05_relay-observability.md)
+- [Self-hosting a fork](./operations/self-hosting.md)
+- [Self-hosted Cloudflare tunnel](./operations/self-hosted-cloudflare-tunnel.md)
