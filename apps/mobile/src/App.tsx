@@ -20,7 +20,6 @@ import {
   type NavigationState,
 } from "@react-navigation/native";
 import { pipe } from "effect/Function";
-import { DEFAULT_HOSTED_APP_URL } from "@t3tools/shared/connectAuth";
 
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { ProjectChipIconRasterizer } from "./native/ProjectChipIconImages";
@@ -110,6 +109,8 @@ import { pruneNewTaskFlowStates } from "./features/threads/new-task-flow-state";
 import { pruneNewTaskBranchCheckouts } from "./features/threads/NewTaskDraftRouteScreen";
 import { installAppUpdateChecks } from "./features/updates/app-updates";
 import { perfProbe } from "./features/development/perf-probe-hooks";
+import Constants from "expo-constants";
+import { configuredHostedAppUrl, setConfiguredHostedAppUrl } from "./lib/hostedAppUrl";
 
 import "../global.css";
 
@@ -119,6 +120,12 @@ if (process.env.EXPO_PUBLIC_SHOWCASE === "1") {
 
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 void hydrateWorkspaceSelections();
+
+setConfiguredHostedAppUrl(
+  typeof Constants.expoConfig?.extra?.hostedAppUrl === "string"
+    ? Constants.expoConfig.extra.hostedAppUrl
+    : undefined,
+);
 
 const linkingConfig = {
   initialRouteName: "Home",
@@ -144,7 +151,7 @@ const appLinking = {
     "t3code://",
     "t3code-dev://",
     "t3code-preview://",
-    DEFAULT_HOSTED_APP_URL,
+    ...(configuredHostedAppUrl() ? [configuredHostedAppUrl()] : []),
   ],
   config: { initialRouteName: "Home" },
   filter: (url: string) => shouldHandleAppLink(url, hasCloudPublicConfig()),

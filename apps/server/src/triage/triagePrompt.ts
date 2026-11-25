@@ -1,3 +1,10 @@
+import {
+  githubIssuesUrl,
+  githubRepositoryUrl,
+  productUrls,
+  runtimeProductEnvironment,
+  type ProductEnvironment,
+} from "@t3tools/contracts/productUrls";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
 
 /** Keep TRIAGE_PLAYBOOK byte-identical to .github/triage/PLAYBOOK.md after unescaping backticks and backslashes. */
@@ -166,6 +173,44 @@ user's environment and evidence instead of filing a new issue. A confirmed
 duplicate with fresh evidence is more useful than a second thread.
 `;
 
+const UNCONFIGURED_REPOSITORY = "no repository configured (set T3CODE_GITHUB_REPOSITORY)";
+
+export function hostedAppLabel(env: ProductEnvironment): string {
+  const raw = env.T3CODE_HOSTED_APP_URL?.trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" || url.protocol === "http:" ? ` (${url.host})` : "";
+  } catch {
+    return "";
+  }
+}
+
+/** The canonical playbook is kept byte-identical to the repo copy; URLs are substituted here. */
+function configuredPlaybook(env: ProductEnvironment): string {
+  const repository = productUrls(env).githubRepository;
+  const repositoryUrl = githubRepositoryUrl(repository) ?? UNCONFIGURED_REPOSITORY;
+  const rawPlaybookUrl =
+    repository === undefined
+      ? UNCONFIGURED_REPOSITORY
+      : `https://raw.githubusercontent.com/${repository}/main/.github/triage/PLAYBOOK.md`;
+  const issueFormUrl =
+    repository === undefined
+      ? UNCONFIGURED_REPOSITORY
+      : `${githubIssuesUrl(repository)}?template=via-triage.yml`;
+  return TRIAGE_PLAYBOOK.replaceAll(
+    "https://raw.githubusercontent.com/pingdotgg/t3code/main/.github/triage/PLAYBOOK.md",
+    rawPlaybookUrl,
+  )
+    .replaceAll(
+      "https://github.com/pingdotgg/t3code/issues/new?template=via-triage.yml",
+      issueFormUrl,
+    )
+    .replaceAll("https://github.com/pingdotgg/t3code", repositoryUrl)
+    .replaceAll("pingdotgg/t3code", repository ?? UNCONFIGURED_REPOSITORY)
+    .replace(" (app.t3.codes)", hostedAppLabel(env));
+}
+
 /** Where the session started: the `t3 triage` CLI, or "Triage an issue" in a client. */
 export type TriageEntry =
   | { readonly kind: "cli"; readonly cliVersion: string; readonly launchedAs: string }
@@ -183,10 +228,13 @@ export const buildTriageLaunchPrompt = (promptFilePath: string) =>
 export const buildTriageAppPrompt = (promptFilePath: string) =>
   `Read ${serializeComposerFileLink(promptFilePath)} and follow it. `;
 
-export const buildTriageSeedPrompt = (input: {
-  readonly contextFilePath: string;
-  readonly entry: TriageEntry;
-}) => `A T3 Code user is having a problem with their install and started this \
+export const buildTriageSeedPrompt = (
+  input: {
+    readonly contextFilePath: string;
+    readonly entry: TriageEntry;
+  },
+  env: ProductEnvironment = runtimeProductEnvironment(),
+) => `A T3 Code user is having a problem with their install and started this \
 session ${input.entry.kind === "cli" ? "with `t3 triage`" : "from the T3 Code app"}.
 
 Machine facts (versions, OS, paths, server liveness) are in the triage context file:
@@ -201,7 +249,7 @@ ${
 
 ---
 
-${TRIAGE_PLAYBOOK}`;
+${configuredPlaybook(env)}`;
 
 /** A clone the server made before the session started, or why it could not. */
 export type TriageSourceClone =
@@ -294,7 +342,10 @@ session. When a fix needs one of those, give the user the exact steps and let
 them do it. The database is in use by that server: read it, never lock it.
 `;
 
-export const buildTriageContext = (input: TriageContextInput) => {
+export const buildTriageContext = (
+  input: TriageContextInput,
+  env: ProductEnvironment = runtimeProductEnvironment(),
+) => {
   const entry = entryLines(input.entry);
   return `# T3 Code triage context
 
@@ -304,7 +355,7 @@ ${entry.before}
 - OS: ${input.os}
 - Node: ${input.nodeVersion}
 ${entry.after === undefined ? "" : `${entry.after}\n`}- Server process: ${input.server}
-- Repo: https://github.com/pingdotgg/t3code
+- Repo: ${githubRepositoryUrl(productUrls(env).githubRepository) ?? UNCONFIGURED_REPOSITORY}
 ${input.entry.kind === "app" ? IN_APP_SECTION : ""}${input.sourceClone === undefined ? "" : sourceSection(input.sourceClone)}
 ## Paths
 

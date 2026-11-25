@@ -4,7 +4,7 @@ import type {
   ThreadPullRequestLink,
 } from "@t3tools/contracts";
 import { threadContextRecord } from "@t3tools/shared/composerContextReferences";
-import { hostedThreadLink } from "@t3tools/shared/threadLinks";
+import { formatThreadLink, hostedThreadLink } from "@t3tools/shared/threadLinks";
 
 import { resolveThreadCurrentPullRequestLink } from "./threadPullRequests.ts";
 import { mFallback, msg } from "gt-i18n";
@@ -34,9 +34,11 @@ export function threadChipCopyTarget(
   resolve: MFunctionType = mFallback,
 ): ThreadReferenceCopyTarget {
   const record = threadContextRecord(threadRef, title);
+  // Without a hosted app origin, a local protocol link still opens the thread in this app.
+  const hosted = hostedThreadLink(threadRef, hostedAppUrl);
   return {
     kind: "thread",
-    value: hostedThreadLink(threadRef, hostedAppUrl),
+    value: hosted ?? formatThreadLink(threadRef),
     description: record.title,
     fragment: { version: 1, source: { environmentId: threadRef.environmentId }, records: [record] },
     clipboardTarget: "thread",

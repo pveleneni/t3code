@@ -349,23 +349,9 @@ function TelemetryNotice({ environmentId }: { readonly environmentId: Environmen
   return (
     <p className="mt-auto pt-12 text-2xs leading-relaxed text-muted-foreground/70">
       {telemetryOff === undefined ? (
-        <T>
-          T3 Code collects anonymous usage data to improve the app. To opt out, see the{" "}
-          <a
-            className="underline decoration-current/40 underline-offset-2 hover:text-muted-foreground"
-            href={PRIVACY_POLICY_URL}
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            privacy policy
-          </a>
-          .
-        </T>
-      ) : (
-        <>
-          {telemetryOff}{" "}
+        PRIVACY_POLICY_URL ? (
           <T>
-            See the{" "}
+            T3 Code collects anonymous usage data to improve the app. To opt out, see the{" "}
             <a
               className="underline decoration-current/40 underline-offset-2 hover:text-muted-foreground"
               href={PRIVACY_POLICY_URL}
@@ -376,6 +362,27 @@ function TelemetryNotice({ environmentId }: { readonly environmentId: Environmen
             </a>
             .
           </T>
+        ) : (
+          <T>T3 Code collects anonymous usage data to improve the app.</T>
+        )
+      ) : (
+        <>
+          {telemetryOff}
+          {PRIVACY_POLICY_URL ? (
+            <T>
+              {" "}
+              See the{" "}
+              <a
+                className="underline decoration-current/40 underline-offset-2 hover:text-muted-foreground"
+                href={PRIVACY_POLICY_URL}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                privacy policy
+              </a>
+              .
+            </T>
+          ) : null}
         </>
       )}
     </p>
@@ -999,25 +1006,29 @@ function PhoneSection({ environmentId }: { readonly environmentId: EnvironmentId
         <CollapsiblePanel>
           <div className="flex items-center gap-8 pt-2 pb-3 pl-8">
             <ol className="min-w-0 flex-1 space-y-5">
-              <PhoneStep step={1}>
-                <p className="text-sm text-foreground">
-                  <T>Scan with your phone to get the app.</T>
-                </p>
-              </PhoneStep>
+              {MOBILE_APP_URL ? (
+                <PhoneStep step={1}>
+                  <p className="text-sm text-foreground">
+                    <T>Scan with your phone to get the app.</T>
+                  </p>
+                </PhoneStep>
+              ) : null}
               <PhoneStep step={2}>
                 <PhoneConnectLink environmentId={environmentId} />
               </PhoneStep>
             </ol>
             {/* One code for both stores: the link opens the store that matches the phone. */}
-            <div className="shrink-0 rounded-lg bg-white p-1.5">
-              <QRCodeSvg
-                value={MOBILE_APP_URL}
-                size={124}
-                level="M"
-                marginSize={2}
-                title={gt("T3 Code app for iPhone and Android")}
-              />
-            </div>
+            {MOBILE_APP_URL ? (
+              <div className="shrink-0 rounded-lg bg-white p-1.5">
+                <QRCodeSvg
+                  value={MOBILE_APP_URL}
+                  size={124}
+                  level="M"
+                  marginSize={2}
+                  title={gt("T3 Code app for iPhone and Android")}
+                />
+              </div>
+            ) : null}
           </div>
         </CollapsiblePanel>
       </Collapsible>

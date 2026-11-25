@@ -52,6 +52,7 @@ import { SettingsRow } from "./settingsLayout";
 import { AddCodexAccountDialog } from "./AddCodexAccountDialog";
 import { getOnboardingProviderState } from "../../onboarding/providerReadiness.logic";
 import { getProviderSummary } from "./providerStatus";
+import { configuredHostedAppUrl } from "../../hostedPairing";
 import {
   settleAuthorizationPage,
   settleHandoffAuthorizationPage,
@@ -685,7 +686,10 @@ function ManagedCodexSetup({
   );
 
   const handoffUrl =
-    needsManualCallback && url && auth?.flowId && providerAuthReturnUrl(returnUrl.toString())
+    needsManualCallback &&
+    url &&
+    auth?.flowId &&
+    providerAuthReturnUrl(returnUrl.toString(), configuredHostedAppUrl())
       ? codexAuthHandoffUrl(
           {
             authorizationUrl: url,

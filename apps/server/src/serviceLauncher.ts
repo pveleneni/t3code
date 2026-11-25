@@ -8,6 +8,7 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import * as NodeUtil from "node:util";
 import { acquireServiceSelectionLock } from "./cloud/serviceSelectionLock.ts";
+import { applyEnvFileValues, readEnvFiles } from "./cloud/envFiles.ts";
 import { RESTORE_OOMD_WATCH_SCRIPT } from "./cloud/userManagerOom.ts";
 import { windowsSystem32Path } from "@t3tools/shared/windowsSystem";
 import { isNoCopyOnWrite, markNoCopyOnWrite } from "./noCopyOnWrite.ts";
@@ -344,6 +345,11 @@ export async function readServiceEnvironment(
   inherited: NodeJS.ProcessEnv = process.env,
 ): Promise<NodeJS.ProcessEnv> {
   const environment = { ...inherited };
+  // The user's own `.env` files apply before service.env: `t3 up` owns the network keys in
+  // service.env, while auth, tunnel and telemetry keys live in `$T3CODE_HOME/.env` or
+  // `$HOME/.env`. A downloaded release is configured without touching either the bundle or
+  // the unit file.
+  applyEnvFileValues(environment, await readEnvFiles({ t3Home: baseDir }), { overwrite: true });
   let contents: string;
   try {
     contents = await NodeFSP.readFile(NodePath.join(baseDir, SERVICE_ENV_FILE), "utf8");

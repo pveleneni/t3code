@@ -1,4 +1,5 @@
 import { type EnvironmentId, SourceControlProviderKind } from "@t3tools/contracts";
+import { githubRepositoryUrl } from "@t3tools/contracts/productUrls";
 import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import * as Schema from "effect/Schema";
 import { msg } from "gt-react";
@@ -7,6 +8,7 @@ import { StarIcon } from "lucide-react";
 import { m } from "../i18n/messages";
 import { getLocalStorageItem, setLocalStorageItem } from "../hooks/useLocalStorage";
 import { readLocalApi } from "../localApi";
+import { PRODUCT_URLS } from "../productUrls";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { sourceControlEnvironment } from "../state/sourceControl";
 import { toastManager } from "./ui/toast";
@@ -14,7 +16,7 @@ import { toastManager } from "./ui/toast";
 // Separate keys so a count written by another tab can never undo a dismissal.
 const SENT_KEY = "t3code:github-star-prompt:sent";
 const DISMISSED_KEY = "t3code:github-star-prompt:dismissed";
-const REPOSITORY = "pingdotgg/t3code";
+const REPOSITORY = PRODUCT_URLS.githubRepository;
 const PROMPTS_BEFORE_ASKING = 5;
 const IDLE_MS = 30_000;
 // User-driven actions (send, navigate, type, scroll) start with one of these; touch fires pointerdown.
@@ -33,8 +35,10 @@ function showStarPrompt(environmentId: EnvironmentId) {
   const close = () => toastManager.close(id);
   const openInBrowser = () => {
     close();
+    const url = githubRepositoryUrl(REPOSITORY);
+    if (url === undefined) return;
     void readLocalApi()
-      ?.shell.openExternal(`https://github.com/${REPOSITORY}`)
+      ?.shell.openExternal(url)
       .catch(() => undefined);
   };
   const starInPlace = async () => {
@@ -113,32 +117,38 @@ function waitForIdle() {
 }
 
 // The server's GitHub account stands in for the user's; it may not be theirs on a shared server.
-const starInput = (environmentId: EnvironmentId) => ({
-  environmentId,
-  input: {
-    provider: SourceControlProviderKind.make("github"),
-    host: "github.com",
-    repository: REPOSITORY,
-  },
-});
+const starInput = (environmentId: EnvironmentId) => {
+  if (REPOSITORY === undefined) return null;
+  return {
+    environmentId,
+    input: {
+      provider: SourceControlProviderKind.make("github"),
+      host: "github.com",
+      repository: REPOSITORY,
+    },
+  };
+};
 
 async function alreadyStarred(environmentId: EnvironmentId) {
+  const input = starInput(environmentId);
+  if (input === null) return undefined;
   const result = await runAtomCommand(
     appAtomRegistry,
     sourceControlEnvironment.checkStarred,
-    starInput(environmentId),
+    input,
     { label: "check GitHub star", reportFailure: false, reportDefect: false },
   );
   return result._tag === "Success" ? result.value : undefined;
 }
 
 async function starRepository(environmentId: EnvironmentId) {
-  const result = await runAtomCommand(
-    appAtomRegistry,
-    sourceControlEnvironment.star,
-    starInput(environmentId),
-    { label: "star on GitHub", reportFailure: false, reportDefect: false },
-  );
+  const input = starInput(environmentId);
+  if (input === null) return false;
+  const result = await runAtomCommand(appAtomRegistry, sourceControlEnvironment.star, input, {
+    label: "star on GitHub",
+    reportFailure: false,
+    reportDefect: false,
+  });
   return result._tag === "Success" && result.value;
 }
 
@@ -147,6 +157,7 @@ async function starRepository(environmentId: EnvironmentId) {
  * unless the environment's GitHub account already starred the repo. Waits until the user is idle.
  */
 export async function recordPromptSent(environmentId: EnvironmentId): Promise<void> {
+  if (REPOSITORY === undefined) return;
   if (shownThisSession) return;
   try {
     if (getLocalStorageItem(DISMISSED_KEY, Schema.Boolean)) return;

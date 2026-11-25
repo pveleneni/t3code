@@ -1,6 +1,8 @@
 import * as Context from "effect/Context";
 import type * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
+
+import { docsPageUrl, productUrls, runtimeProductEnvironment } from "./productUrls.ts";
 import * as HttpApi from "effect/http-api/HttpApi";
 import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
@@ -527,8 +529,14 @@ export const T3_CONNECT_TROUBLESHOOTING_SECTIONS = [
 export type T3ConnectTroubleshootingSection = (typeof T3_CONNECT_TROUBLESHOOTING_SECTIONS)[number];
 
 /** Clients, the CLI, and server logs link here as "More info". */
-export function t3ConnectTroubleshootingUrl(section: T3ConnectTroubleshootingSection): string {
-  return `https://github.com/pingdotgg/t3code/blob/main/docs/user/t3-connect-troubleshooting.md#${section}`;
+export function t3ConnectTroubleshootingUrl(
+  section: T3ConnectTroubleshootingSection,
+  env = runtimeProductEnvironment(),
+): string | null {
+  return (
+    docsPageUrl(productUrls(env).docsBaseUrl, `user/t3-connect-troubleshooting.md#${section}`) ??
+    null
+  );
 }
 
 const REACHABILITY_SECTION = {
@@ -544,7 +552,7 @@ const REACHABILITY_SECTION = {
 } satisfies Record<EnvironmentConnectReachabilityCause, T3ConnectTroubleshootingSection>;
 
 export function connectReachabilityHelpUrl(cause: EnvironmentConnectReachabilityCause): string {
-  return t3ConnectTroubleshootingUrl(REACHABILITY_SECTION[cause]);
+  return t3ConnectTroubleshootingUrl(REACHABILITY_SECTION[cause]) ?? "";
 }
 
 export const EnvironmentCloudLinkStateResult = Schema.Struct({

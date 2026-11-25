@@ -20,7 +20,13 @@ function hasConnectCliAuthConfig(): boolean {
 }
 
 export function connectCliAuthRoutesEnabled(): boolean {
-  return isHostedStaticApp() && hasCloudPublicConfig() && hasConnectCliAuthConfig();
+  // CLI sign-in builds its /connect URL from the configured origin; no origin means no routes.
+  return (
+    Boolean(resolveCloudPublicConfig().hostedAppUrl) &&
+    isHostedStaticApp() &&
+    hasCloudPublicConfig() &&
+    hasConnectCliAuthConfig()
+  );
 }
 
 export function buildConnectCliClerkAuthorizeUrl(request: ConnectAuthorizeRequest): string | null {

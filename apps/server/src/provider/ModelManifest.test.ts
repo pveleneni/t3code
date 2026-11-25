@@ -13,6 +13,8 @@ import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ModelManifest from "./ModelManifest.ts";
 
+process.env.T3CODE_MODEL_MANIFEST_URL = "https://example.com/model-manifest.json";
+
 describe("resolveProviderCatalog", () => {
   it.each([
     { releasedAt: "2026-01-01", now: "2026-01-01T00:00:00Z", badge: "new" },

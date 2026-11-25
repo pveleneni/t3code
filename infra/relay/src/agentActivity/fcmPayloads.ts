@@ -1,11 +1,16 @@
 import type { RelayAgentActivityAggregateState } from "@t3tools/contracts/relay";
+import { sha256 } from "@noble/hashes/sha2";
 import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
-import { hashTelemetryId } from "@t3tools/shared/telemetryId";
+import * as Hex from "effect/encoding/Hex";
 import {
   activityPhasePriority,
   TERMINAL_AGENT_ACTIVITY_DISPLAY_TTL_MS,
 } from "./agentActivityAggregate.ts";
 import { agentActivityExpiresAt } from "./agentActivityPayloads.ts";
+
+/** Hashes a notification recipient so FCM does not see the account id. */
+const hashNotificationRecipient = (value: string) =>
+  Hex.encode(sha256(new TextEncoder().encode(value)));
 
 /**
  * Lets the device ignore pushes for an account it no longer has without FCM
@@ -18,7 +23,7 @@ export function androidRecipientData(userId: string, deviceId: string, appVersio
     compareSemverVersions(appVersion, "2.4.0") >= 0;
   return {
     device_id: deviceId,
-    user_hash: hashTelemetryId(`${userId}:${deviceId}`),
+    user_hash: hashNotificationRecipient(`${userId}:${deviceId}`),
     ...(readsHash ? {} : { user_id: userId }),
   };
 }

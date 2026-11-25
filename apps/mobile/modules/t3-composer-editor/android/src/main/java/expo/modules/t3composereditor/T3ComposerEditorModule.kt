@@ -9,9 +9,10 @@ import org.json.JSONObject
 import org.json.JSONArray
 
 internal object T3ComposerClipboard {
-  // Pasted thread links become chips in JS; packages/shared/src/threadLinks.ts parses them.
+  // Pasted thread links become chips in JS; packages/shared/src/threadLinks.ts validates the host.
   fun hasThreadLink(text: String): Boolean =
-    text.contains("t3-thread://v2/") || text.contains("https://app.t3.codes/threads/")
+    text.contains("t3-thread://v2/") ||
+      (text.contains("https://") && text.contains("/threads/"))
 
   // Clipboard bridges can echo our text back without its HTML context metadata.
   private var copiedContext: Pair<String, String>? = null

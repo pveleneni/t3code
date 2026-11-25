@@ -56,6 +56,7 @@ import {
 import { useNowAfter } from "../../lib/clock";
 import { cn } from "../../lib/cn";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
+import { configuredHostedAppUrl } from "../../lib/hostedAppUrl";
 import { copyThreadReference } from "../../lib/copyThreadReference";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import { useEnvironmentScope, useEnvironmentScopeDenied } from "../../state/session";
@@ -1246,7 +1247,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         const target = threadChipCopyTarget(
           { environmentId: thread.environmentId, threadId: thread.id },
           thread.title,
-          undefined,
+          configuredHostedAppUrl(),
           m,
         );
         void copyThreadReference(target).then((didCopy) => {

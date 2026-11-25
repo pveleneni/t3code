@@ -1,4 +1,3 @@
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as HttpObservability from "@t3tools/shared/httpObservability";
 import { makeLocalFileTracer, makeTraceSink } from "@t3tools/shared/observability";
 import * as SharedObservability from "@t3tools/shared/observability";
@@ -28,7 +27,7 @@ export const layer = Layer.unwrap(
     const metrics = config.otlpMetricsExport;
     // Keep serialization in context for the browser trace forwarder's exporter.
     const layerSerialization = SharedObservability.layerOtlpSerialization(traces.protocol);
-    const resource = ServerConfig.otlpResource(config, yield* HostProcess.Hostname);
+    const resource = ServerConfig.otlpResource(config);
     const attribution = yield* ResourceAttribution.ResourceAttribution;
 
     const layerTraceReferences = Layer.mergeAll(

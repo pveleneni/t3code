@@ -181,6 +181,7 @@ import {
   resolveIssueLinkTarget,
 } from "@t3tools/client-runtime/issue-links";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import { configuredHostedAppUrl } from "~/hostedPairing";
 import { useOpenChangeRequestLink } from "~/lib/openPullRequestLink";
 import { textDirection } from "~/textDirection";
 import { useOpenLink } from "../browser/useOpenLink";
@@ -444,7 +445,7 @@ function safeUrl(value: string): string {
 function markdownUrlTransform(href: string) {
   if (parseAssistantCitationHref(href)) return href;
   if (parseComposerContextHref(href)) return href;
-  if (parseThreadLinkHref(href)) return href;
+  if (parseThreadLinkHref(href, configuredHostedAppUrl())) return href;
   if (isWindowsDrivePathHref(href)) return href;
   if (isLocalEditorFileHref(href)) return href;
   if (parseMarkdownSandboxFileLink(href)) return href;
@@ -1305,11 +1306,12 @@ const CHAT_MARKDOWN_COMPONENTS = {
     if (citation) {
       return <AssistantCitationEmbed citation={citation} leading={leading} trailing={trailing} />;
     }
-    const threadLink = href ? parseThreadLinkHref(href) : null;
+    const hostedAppUrl = configuredHostedAppUrl();
+    const threadLink = href ? parseThreadLinkHref(href, hostedAppUrl) : null;
     if (threadLink) {
       const written = hastPlainTextDeep(node);
       // An autolink's text is its own URL, which is no label.
-      const label = written && parseThreadLinkHref(written) === null ? written : null;
+      const label = written && parseThreadLinkHref(written, hostedAppUrl) === null ? written : null;
       return environmentId ? (
         <MarkdownThreadLink
           environmentId={environmentId}

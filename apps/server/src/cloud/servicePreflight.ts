@@ -2,6 +2,8 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
+import { productUrls } from "@t3tools/shared/productUrls";
+
 import packageJson from "../../package.json" with { type: "json" };
 import { BUILD_MIGRATION_HEAD, recordedMigrations } from "../persistence/databaseMigrationHead.ts";
 import { skippedV2Migrations } from "../persistence/Migrations.ts";
@@ -44,6 +46,7 @@ export function runServicePreflight(input: {
   const version = input.version ?? packageJson.version;
   const { launcherProtocol } = input;
   if (!isSupportedLauncherProtocol(launcherProtocol)) {
+    const installUrl = productUrls(process.env).installUrl;
     return {
       status: "blocked",
       version,
@@ -51,7 +54,9 @@ export function runServicePreflight(input: {
       // reinstall itself and report success, so name the exact install and the path check.
       reason: [
         `The installed service launcher speaks protocol ${launcherProtocol}, but t3@${version} requires protocol ${SERVICE_LAUNCHER_PROTOCOL}.`,
-        `On the server machine, install this exact CLI: \`curl -fsSL https://t3.codes/install.sh | T3CODE_VERSION=${version} sh\`.`,
+        installUrl === undefined
+          ? `On the server machine, install this exact CLI from your configured T3CODE_INSTALL_URL (version ${version}).`
+          : `On the server machine, install this exact CLI: \`curl -fsSL ${installUrl} | T3CODE_VERSION=${version} sh\`.`,
         `Check that \`t3 --version\` prints ${version} and that \`which -a t3\` lists no older t3 (such as an npm or nvm install) first, then run \`~/.local/bin/t3 service install\` (the installer's default path).`,
         "Updating the desktop app does not update this CLI, and `t3 service update` only repairs the service with whichever CLI runs it.",
       ].join(" "),

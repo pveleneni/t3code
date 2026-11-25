@@ -651,14 +651,16 @@ function ConfiguredCloudLinkRow({
         {[reachability.reason, reachability.hint, gt("Fix: {fix}", { fix: reachability.fix })]
           .filter(Boolean)
           .join(" ")}{" "}
-        <a
-          href={connectReachabilityHelpUrl(reachability.cause)}
-          target="_blank"
-          rel="noreferrer"
-          className="underline underline-offset-2"
-        >
-          <T>More info</T>
-        </a>
+        {connectReachabilityHelpUrl(reachability.cause) ? (
+          <a
+            href={connectReachabilityHelpUrl(reachability.cause)}
+            target="_blank"
+            rel="noreferrer"
+            className="underline underline-offset-2"
+          >
+            <T>More info</T>
+          </a>
+        ) : null}
       </span>
     ) : null;
 

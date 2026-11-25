@@ -2,7 +2,6 @@ import { GitCommandError, OrchestrationDispatchCommandError } from "@t3tools/con
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- A synchronous digest inside the pure provider mapping.
 import * as NodeCrypto from "node:crypto";
 import * as FeatureFlags from "@t3tools/shared/FeatureFlags";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as NodeHttpServerRequest from "@effect/platform-node/NodeHttpServerRequest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -41,11 +40,6 @@ import {
   type ScheduledTaskListResult,
   WorkflowRequestError,
   AuthSessionId,
-  ClientConnectionMethod,
-  ClientDeviceType,
-  ClientOs,
-  ClientSurface,
-  ClientWebDeployment,
   type DiscoveredLocalServerList,
   type EditorId,
   type FileManagerRevealKind,
@@ -198,7 +192,6 @@ import * as ProviderAuthService from "./provider/ProviderAuthService.ts";
 import * as ProviderInstallation from "./provider/providerInstallation.ts";
 import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
 import * as NpmRelease from "./cloud/npmRelease.ts";
-import * as RelayTracing from "./cloud/relayTracing.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
@@ -264,7 +257,6 @@ import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as HostResources from "./resourceTelemetry/HostResources.ts";
 import * as AnalyticsService from "./telemetry/AnalyticsService.ts";
 import { commandFeatureUsage, featureUsage } from "./telemetry/FeatureUsage.ts";
-import type { TelemetryOwner } from "./telemetry/Identify.ts";
 import * as UsageService from "./usage/UsageService.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as TriageService from "./triage/TriageService.ts";
@@ -297,7 +289,6 @@ import {
   SOCKET_FRAME_PARTS_QUERY_PARAM,
   splitLargeSocketFrames,
 } from "@t3tools/shared/socketFrameParts";
-import { isTelemetryIdHash } from "@t3tools/shared/telemetryId";
 import {
   sameUsageLimitCommandCoverage,
   withUsageLimitsCommands,
@@ -802,15 +793,6 @@ function toAuthAccessStreamEvent(
   }
 }
 
-const isClientSurface = Schema.is(ClientSurface);
-const isClientConnectionMethod = Schema.is(ClientConnectionMethod);
-const isClientDeviceType = Schema.is(ClientDeviceType);
-const isClientOs = Schema.is(ClientOs);
-const isClientWebDeployment = Schema.is(ClientWebDeployment);
-const MAX_CLIENT_APP_VERSION_LENGTH = 64;
-const MAX_CLIENT_BROWSER_LENGTH = 64;
-const MAX_CLIENT_DEVICE_MODEL_LENGTH = 80;
-
 function hasCompatibleOrchestrationProtocol(url: URL): boolean {
   return (
     url.searchParams.get(ORCHESTRATION_PROTOCOL_QUERY_PARAM) ===
@@ -831,73 +813,6 @@ function shouldUseBoundedThreadSnapshot(input: {
   readonly acceptDeferredWork?: boolean;
 }): boolean {
   return input.acceptBoundedSnapshot === true;
-}
-
-// Keep telemetry per socket; several client types can connect simultaneously.
-function readClientAnalyticsProps(request: HttpServerRequest.HttpServerRequest) {
-  const url = requestUrl(request);
-  if (Option.isNone(url)) {
-    return {};
-  }
-
-  const surface = url.value.searchParams.get("clientSurface");
-  const appVersion = url.value.searchParams.get("clientAppVersion")?.trim() ?? "";
-  const deviceType = url.value.searchParams.get("clientDeviceType");
-  const os = url.value.searchParams.get("clientOs");
-  const webDeployment = url.value.searchParams.get("clientWebDeployment");
-  const browser = url.value.searchParams.get("clientBrowser")?.trim() ?? "";
-  const connectionMethod = url.value.searchParams.get("connectionMethod");
-  const rawOsMajorVersion = url.value.searchParams.get("clientOsMajorVersion") ?? "";
-  const osMajorVersion = Number(rawOsMajorVersion);
-  const deviceModel = url.value.searchParams.get("clientDeviceModel")?.trim() ?? "";
-  const isMobile = surface === "mobile";
-  const hasOsMajorVersion =
-    isMobile && rawOsMajorVersion !== "" && Number.isInteger(osMajorVersion) && osMajorVersion > 0;
-  const hasDeviceModel =
-    isMobile && deviceModel !== "" && deviceModel.length <= MAX_CLIENT_DEVICE_MODEL_LENGTH;
-
-  return {
-    ...(isClientSurface(surface) ? { surface } : {}),
-    ...(appVersion !== "" && appVersion.length <= MAX_CLIENT_APP_VERSION_LENGTH
-      ? { appVersion, clientAppVersion: appVersion }
-      : {}),
-    ...(isClientOs(os)
-      ? {
-          clientOs: os,
-          ...(isMobile && (os === "iOS" || os === "Android") ? { os } : {}),
-        }
-      : {}),
-    ...(isClientDeviceType(deviceType) ? { clientDeviceType: deviceType } : {}),
-    ...(surface === "web" && isClientWebDeployment(webDeployment) ? { webDeployment } : {}),
-    ...(surface === "web" && browser !== "" && browser.length <= MAX_CLIENT_BROWSER_LENGTH
-      ? { clientBrowser: browser }
-      : {}),
-    ...(hasOsMajorVersion ? { osMajorVersion, clientOsMajorVersion: osMajorVersion } : {}),
-    ...(hasDeviceModel ? { deviceModel, clientDeviceModel: deviceModel } : {}),
-    ...(isClientConnectionMethod(connectionMethod) ? { connectionMethod } : {}),
-  };
-}
-
-/**
- * Owners a connecting client reports: its hashed T3 Connect account and its
- * hashed device id. Only hashes are accepted, so a raw id never reaches analytics.
- */
-function readClientOwners(
-  request: HttpServerRequest.HttpServerRequest,
-): ReadonlyArray<TelemetryOwner> {
-  const url = requestUrl(request);
-  if (Option.isNone(url)) {
-    return [];
-  }
-  const params = url.value.searchParams;
-  return (
-    [
-      ["connect", params.get("clientOwner")],
-      ["device", params.get("clientDevice")],
-    ] as const
-  ).flatMap(([source, ownerId]) =>
-    ownerId !== null && isTelemetryIdHash(ownerId) ? [{ source, ownerId }] : [],
-  );
 }
 
 const enrichProjectShells = Effect.fn("ws.orchestrationV2.enrichProjectShells")(
@@ -1457,7 +1372,6 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
 
 export const layerWsRpc = (
   currentSession: EnvironmentAuth.AuthenticatedSession,
-  clientAnalyticsProps: Readonly<Record<string, unknown>>,
   serverBrowser: ServerBrowser.ServerBrowser["Service"],
   reportProfiles: ServerBrowser.ProfileReporter,
   settingsClient: ServerSettings.SettingsClient,
@@ -1487,20 +1401,14 @@ export const layerWsRpc = (
       const mcpAppRequests = yield* McpAppRequests.McpAppRequests;
       const mcpSignIn = yield* McpSignIn.McpSignIn;
       const analytics = yield* AnalyticsService.AnalyticsService;
-      const originProps = clientAnalyticsProps;
       const recordClientCommandAnalytics = (command: OrchestrationV2Command) => {
         const usage = commandFeatureUsage(command);
         return Effect.all(
           [
             command.type === "message.dispatch"
-              ? analytics.record("client.turn.requested", originProps)
+              ? analytics.record("client.turn.requested")
               : Effect.void,
-            usage === undefined
-              ? Effect.void
-              : analytics.record("feature.used", {
-                  ...usage,
-                  ...(originProps.surface === undefined ? {} : { surface: originProps.surface }),
-                }),
+            usage === undefined ? Effect.void : analytics.record("feature.used", { ...usage }),
           ],
           { discard: true },
         ).pipe(Effect.ignore);
@@ -1590,7 +1498,6 @@ export const layerWsRpc = (
       const storageCleanup = yield* StorageCleanup.StorageCleanup;
       const databaseStorage = yield* DatabaseStorage.DatabaseStorage;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
-      const hostEnvironment = yield* HostProcess.Environment;
       const secretResolver = yield* SecretResolver.SecretResolver;
       const peerLinks = yield* PeerLinks.PeerLinks;
       const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
@@ -1916,7 +1823,6 @@ export const layerWsRpc = (
           environment,
           auth,
           cwd: config.cwd,
-          hostname: yield* HostProcess.Hostname,
           keybindingsConfigPath: config.keybindingsConfigPath,
           keybindings: keybindingsConfig.keybindings,
           issues: keybindingsConfig.issues,
@@ -1949,10 +1855,7 @@ export const layerWsRpc = (
                 }
               : {}),
             otlpLogsEnabled: config.otlpLogsUrl !== undefined,
-            relayTracingAllowed: RelayTracing.allowedFor(
-              hostEnvironment,
-              serverSettings.managedPolicy,
-            ),
+            relayTracingAllowed: false,
           },
           settings,
           ...(serverSettings.managedPolicy === undefined
@@ -2299,20 +2202,18 @@ export const layerWsRpc = (
                     ),
                 )
                 .pipe(
-                  // A resumed launch is a retry of one already counted.
                   Effect.tap((result) =>
                     result.resumed
                       ? Effect.void
                       : analytics
                           .record("client.thread.started", {
-                            ...originProps,
                             workspaceStrategy: input.workspaceStrategy.type,
                           })
                           .pipe(
                             Effect.andThen(
                               input.initialMessage === undefined
                                 ? Effect.void
-                                : analytics.record("client.turn.requested", originProps),
+                                : analytics.record("client.turn.requested"),
                             ),
                             Effect.ignore,
                           ),
@@ -3861,8 +3762,6 @@ export const layer = Layer.unwrap(
             "sec-websocket-extensions"
           ];
         }
-        const clientAnalyticsProps = readClientAnalyticsProps(request);
-        yield* analytics.recordOwners(readClientOwners(request), "client");
         const reportProfiles = yield* serverBrowser.profileReporter;
         const rpcWebSocketHttpEffect = yield* Effect.gen(function* () {
           const { protocol, httpEffect } = yield* RpcServer.makeProtocolWithHttpEffectWebsocket;
@@ -3871,19 +3770,10 @@ export const layer = Layer.unwrap(
             Effect.provide(
               Layer.merge(
                 RpcAuthorization.layer(session.scopes, (method, payload) => {
-                  // Anonymous product signal: the feature and its enum variant,
-                  // credited to the connecting client's surface only.
                   const usage = featureUsage(method, payload);
                   return usage === undefined
                     ? Effect.void
-                    : analytics
-                        .record("feature.used", {
-                          ...usage,
-                          ...(clientAnalyticsProps.surface === undefined
-                            ? {}
-                            : { surface: clientAnalyticsProps.surface }),
-                        })
-                        .pipe(Effect.ignore);
+                    : analytics.record("feature.used", { ...usage }).pipe(Effect.ignore);
                 }),
                 rpcInstrumentationLayer,
               ),
@@ -3893,13 +3783,7 @@ export const layer = Layer.unwrap(
           return httpEffect;
         }).pipe(
           Effect.provide(
-            layerWsRpc(
-              session,
-              clientAnalyticsProps,
-              serverBrowser,
-              reportProfiles,
-              readSettingsClient(url.value),
-            ).pipe(
+            layerWsRpc(session, serverBrowser, reportProfiles, readSettingsClient(url.value)).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
               // Handler-context reporters see only request defects, not server-wide defects.
               Layer.provide(DefectReporter.layer),

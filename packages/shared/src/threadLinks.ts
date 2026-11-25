@@ -2,14 +2,12 @@ import { EnvironmentId, ThreadId, type ScopedThreadRef } from "@t3tools/contract
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-import { DEFAULT_HOSTED_APP_URL } from "./connectAuth.ts";
+import { configuredHostedAppOrigin, normalizeHostedAppOrigin } from "./connectAuth.ts";
 
 export const THREAD_LINK_PROTOCOL = "t3-thread";
 const V1_PREFIX = `${THREAD_LINK_PROTOCOL}://v1/`;
 const V2_PREFIX = `${THREAD_LINK_PROTOCOL}://v2/`;
-const HOSTED_PREFIX = `${DEFAULT_HOSTED_APP_URL}/threads/`;
 const HOSTED_SEGMENT = "[A-Za-z0-9_%-]+";
-const HOSTED_LINK = `${HOSTED_PREFIX.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}${HOSTED_SEGMENT}/${HOSTED_SEGMENT}`;
 const THREAD_HREF = String.raw`t3-thread:\/\/v[12]\/`;
 // A label stops at any bracket, so a run of unclosed brackets is scanned once, not once per bracket.
 const LABEL = String.raw`[^[\]\n]*`;
@@ -40,23 +38,47 @@ const SPAN_BREAK_LINE =
 const LINE_PREFIX = /([ \t]*)(>|(?:[-*+]|\d{1,9}[.)])[ \t]+)?/y;
 const THEMATIC_BREAK = /^(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})\r?$/;
 const SETEXT_UNDERLINE = /^(?:-+|=+)[ \t]*\r?$/;
-// Earlier alternatives claim text so later ones cannot match inside it: an escaped character opens
-// nothing, code is literal, and a link to anywhere else keeps a thread URL in its label or href.
-const THREAD_LINK_OUTSIDE_CODE = new RegExp(
-  [
-    String.raw`\\[!-/:-@[-\`{-~]`,
-    fencedCode("`", "bt"),
-    fencedCode("~", "tl"),
-    String.raw`(?<spanTicks>\`+)`,
-    // A labeled link's destination may be angle-bracketed, as CommonMark allows: [label](<href>).
-    String.raw`\[(?<label>${LABEL})\]\((?:<(?<angleHref>${THREAD_HREF}[^\s<>]+|${HOSTED_LINK})>|(?<href>${THREAD_HREF}[^\s>)]+|${HOSTED_LINK}))\)`,
-    String.raw`\[${LABEL}\]\((?:<[^<>\n]*>|[^\s()]*(?:\([^\s()]*\)[^\s()]*)*)(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'))?\)`,
-    String.raw`<(?<autolink>${THREAD_HREF}[^\s<>]+|${HOSTED_LINK})>`,
-    // After a URL character the hosted link is part of a longer URL, such as a redirect target.
-    String.raw`(?<![A-Za-z0-9%/?#=&@+-])(?<bare>${HOSTED_LINK})(?![\w%/?#-])`,
-  ].join("|"),
-  "gm",
-);
+const patternCache = new Map<string, RegExp>();
+
+function hostedPrefix(origin: string | null | undefined): string | null {
+  const normalized = normalizeHostedAppOrigin(origin ?? undefined);
+  return normalized === null ? null : `${normalized}/threads/`;
+}
+
+/** Only a configured hosted app's links are thread links; every build still reads `t3-thread://`. */
+function threadLinkPattern(hostedAppOrigin: string | null | undefined): RegExp {
+  const prefix = hostedPrefix(hostedAppOrigin);
+  const key = prefix ?? "";
+  const cached = patternCache.get(key);
+  if (cached) return cached;
+  const hostedLink =
+    prefix === null
+      ? null
+      : `${prefix.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}${HOSTED_SEGMENT}/${HOSTED_SEGMENT}`;
+  const href = (suffix: string) =>
+    hostedLink === null ? `${THREAD_HREF}${suffix}` : `${THREAD_HREF}${suffix}|${hostedLink}`;
+  // Earlier alternatives claim text so later ones cannot match inside it: an escaped character opens
+  // nothing, code is literal, and a link to anywhere else keeps a thread URL in its label or href.
+  const pattern = new RegExp(
+    [
+      String.raw`\\[!-/:-@[-\`{-~]`,
+      fencedCode("`", "bt"),
+      fencedCode("~", "tl"),
+      String.raw`(?<spanTicks>\`+)`,
+      // A labeled link's destination may be angle-bracketed, as CommonMark allows: [label](<href>).
+      String.raw`\[(?<label>${LABEL})\]\((?:<(?<angleHref>${href("[^\\s<>]+")})>|(?<href>${href("[^\\s>)]+")}))\)`,
+      String.raw`\[${LABEL}\]\((?:<[^<>\n]*>|[^\s()]*(?:\([^\s()]*\)[^\s()]*)*)(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'))?\)`,
+      String.raw`<(?<autolink>${href("[^\\s<>]+")})>`,
+      // After a URL character the hosted link is part of a longer URL, such as a redirect target.
+      ...(hostedLink === null
+        ? []
+        : [String.raw`(?<![A-Za-z0-9%/?#=&@+-])(?<bare>${hostedLink})(?![\w%/?#-])`]),
+    ].join("|"),
+    "gm",
+  );
+  patternCache.set(key, pattern);
+  return pattern;
+}
 
 function codeSpanLines(markdown: string) {
   const lines: Array<{ start: number; depth: number; breaksSpan: boolean }> = [];
@@ -157,16 +179,21 @@ const hostedSegment = (id: string) =>
     (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
   );
 
-/** Opens the thread from anywhere: the hosted app offers the desktop app, the mobile app, or itself. */
-export function hostedThreadLink(ref: ScopedThreadRef, origin = DEFAULT_HOSTED_APP_URL): string {
+/** Opens the thread from anywhere; null when no hosted app origin is configured. */
+export function hostedThreadLink(
+  ref: ScopedThreadRef,
+  origin: string | null = configuredHostedAppOrigin(),
+): string | null {
+  const normalized = normalizeHostedAppOrigin(origin ?? undefined);
+  if (normalized === null) return null;
   const path = `/threads/${hostedSegment(ref.environmentId)}/${hostedSegment(ref.threadId)}`;
-  return new URL(path, origin).toString();
+  return new URL(path, normalized).toString();
 }
 
 const HOSTED_PATH = new RegExp(`^(${HOSTED_SEGMENT})/(${HOSTED_SEGMENT})$`);
 
-function parseHostedThreadLink(href: string): ThreadLink | null {
-  const match = HOSTED_PATH.exec(href.slice(HOSTED_PREFIX.length));
+function parseHostedThreadLink(href: string, prefix: string): ThreadLink | null {
+  const match = HOSTED_PATH.exec(href.slice(prefix.length));
   if (!match) return null;
   try {
     const environmentId = Option.getOrNull(decodeEnvironmentId(decodeURIComponent(match[1]!)));
@@ -181,8 +208,12 @@ function parseHostedThreadLink(href: string): ThreadLink | null {
  * The ids as written. Thread ids can hold percent escapes of their own, so they are not decoded,
  * except in a hosted link, which escapes them itself.
  */
-export function parseThreadLinkHref(href: string): ThreadLink | null {
-  if (href.startsWith(HOSTED_PREFIX)) return parseHostedThreadLink(href);
+export function parseThreadLinkHref(
+  href: string,
+  hostedAppOrigin: string | null = configuredHostedAppOrigin(),
+): ThreadLink | null {
+  const prefix = hostedPrefix(hostedAppOrigin);
+  if (prefix !== null && href.startsWith(prefix)) return parseHostedThreadLink(href, prefix);
   if (href.startsWith(V1_PREFIX)) {
     const threadId = Option.getOrNull(decodeThreadId(href.slice(V1_PREFIX.length)));
     return threadId === null ? null : { environmentId: null, threadId };
@@ -259,21 +290,30 @@ export function formatThreadLink(ref: ThreadLink, label?: string): string {
 export function formatHostedThreadLink(
   ref: ScopedThreadRef,
   label: string,
-  origin?: string,
-): string {
+  origin: string | null = configuredHostedAppOrigin(),
+): string | null {
   const href = hostedThreadLink(ref, origin);
+  if (href === null) return null;
   const cleaned = linkLabel(label);
   return cleaned ? `[${cleaned}](${href})` : href;
 }
 
-export function hasThreadLinks(markdown: string): boolean {
-  return markdown.includes(`${THREAD_LINK_PROTOCOL}://v`) || markdown.includes(HOSTED_PREFIX);
+export function hasThreadLinks(
+  markdown: string,
+  hostedAppOrigin: string | null = configuredHostedAppOrigin(),
+): boolean {
+  const prefix = hostedPrefix(hostedAppOrigin);
+  return (
+    markdown.includes(`${THREAD_LINK_PROTOCOL}://v`) ||
+    (prefix !== null && markdown.includes(prefix))
+  );
 }
 
 /** Every thread the markdown's links can name, so their titles are keyed reads. */
 export function threadLinkRefs(
   markdown: string,
   messageEnvironmentId: EnvironmentId,
+  hostedAppOrigin: string | null = configuredHostedAppOrigin(),
 ): ReadonlyArray<ScopedThreadRef> {
   const refs = new Map<string, ScopedThreadRef>();
   replaceThreadLinks(markdown, (link) => {
@@ -281,7 +321,7 @@ export function threadLinkRefs(
       refs.set(`${ref.environmentId}/${ref.threadId}`, ref);
     }
     return undefined;
-  });
+  }, hostedAppOrigin);
   return [...refs.values()];
 }
 
@@ -289,10 +329,11 @@ export function threadLinkRefs(
 export function replaceThreadLinks(
   markdown: string,
   replace: (link: ThreadLink, label: string | undefined) => string | undefined,
+  hostedAppOrigin: string | null = configuredHostedAppOrigin(),
 ): string {
-  if (!hasThreadLinks(markdown)) return markdown;
+  if (!hasThreadLinks(markdown, hostedAppOrigin)) return markdown;
   // Hermes' matchAll yields matches without `groups`; exec keeps them.
-  const pattern = new RegExp(THREAD_LINK_OUTSIDE_CODE);
+  const pattern = threadLinkPattern(hostedAppOrigin);
   const source = threadLinkSource(markdown);
   let result = "";
   let cursor = 0;
@@ -310,7 +351,7 @@ export function replaceThreadLinks(
     }
     const href =
       match.groups?.angleHref ?? match.groups?.href ?? match.groups?.autolink ?? match.groups?.bare;
-    const link = href === undefined ? null : parseThreadLinkHref(href);
+    const link = href === undefined ? null : parseThreadLinkHref(href, hostedAppOrigin);
     const label = match.groups?.label;
     const rewritten =
       link === null

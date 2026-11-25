@@ -78,7 +78,6 @@ Key constraints:
     "webhookTasks": false,
     "browserCookieImport": false,
     "previewTunnel": false,
-    "worktreeLayoutCommands": false,
     "telemetry": false,
     "providers": {
       "allowedDrivers": ["claudeAgent", "codex"],
@@ -109,11 +108,18 @@ When `maxRuntimeMode` is set, users cannot modify provider launch settings (`bin
 
 ### Other capabilities
 
-- `webhookTasks: false`: Disables scheduled-task and workflow webhooks.
-- `browserCookieImport: false`: Disables importing cookies from other browsers.
-- `previewTunnel: false`: Disables remote `localhost` tunneling and port forwarding (streams tabs instead).
+- `webhookTasks: false`: scheduled tasks cannot use webhook triggers. Existing webhook tasks stay
+  but do not run, and cannot be turned back on. Users can still edit or delete them.
+  Workflow webhooks are refused too.
+- `browserCookieImport: false`: users cannot import cookies from another browser into T3 Code's
+  browser.
+- `previewTunnel: false`: other devices cannot load this machine's `localhost` pages themselves.
+  Browser tabs stream from it instead, and port forwarding and **Open on this device** are
+  unavailable. This wins over the user's
+  [Preview tunnel setting](./remote-access.md#browser-on-a-remote-environment).
 - `worktreeLayoutCommands: false`: Disables `t3.json` `worktreeLayout` `create`/`remove` commands.
-- `telemetry: false`: Disables product usage data and relay tracing for the server, desktop app, and server-opened browsers (does not control `app.t3.codes` or mobile).
+- `telemetry: false`: accepted for compatibility. This fork sends no product usage data or
+  relay connection traces at all, so the policy cannot change that behavior.
 
 ### Providers
 

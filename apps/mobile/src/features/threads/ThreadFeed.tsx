@@ -99,6 +99,7 @@ import {
 } from "@t3tools/shared/composerContextReferences";
 import { ComposerContextSheet } from "../../components/ComposerContextSheet";
 import { writeComposerContextClipboard } from "../../lib/composerContextClipboard";
+import { configuredHostedAppUrl } from "../../lib/hostedAppUrl";
 import type { CodexArtifactTemplate } from "@t3tools/shared/codexArtifactTemplates";
 import { codexArtifactTemplatePresentationLabel } from "@t3tools/shared/codexArtifactTemplatesCopy";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
@@ -346,10 +347,12 @@ import {
 import { useMessageTimeFormatter } from "./useMessageTimeFormatter";
 import { perfProbe, type PerfProbe } from "../development/perf-probe-hooks";
 
-const linkedThreadEnvironmentIds = (markdown: string, environmentId: EnvironmentId) =>
-  hasThreadLinks(markdown)
-    ? threadLinkRefs(markdown, environmentId).map((ref) => ref.environmentId)
+const linkedThreadEnvironmentIds = (markdown: string, environmentId: EnvironmentId) => {
+  const hostedAppUrl = configuredHostedAppUrl();
+  return hasThreadLinks(markdown, hostedAppUrl)
+    ? threadLinkRefs(markdown, environmentId, hostedAppUrl).map((ref) => ref.environmentId)
     : [];
+};
 
 const WIDE_MARKDOWN_BLOCK_OPTIONS = {
   // iOS blockquotes and selectable text measure separately; definite bubble width matches UIKit's drawing width.
@@ -1324,7 +1327,7 @@ const AssistantMarkdownContent = memo(function AssistantMarkdownContent(props: {
     props.markdown,
     props.environmentId,
     useLinkedEnvironments(
-      hasThreadLinks(props.markdown) ? props.environmentId : null,
+      hasThreadLinks(props.markdown, configuredHostedAppUrl()) ? props.environmentId : null,
       linkedThreadEnvironmentIds(props.markdown, props.environmentId),
     ),
   );
@@ -2773,7 +2776,7 @@ function UserMessageContent(props: UserMessageContentProps) {
     props.text,
     props.environmentId,
     useLinkedEnvironments(
-      hasThreadLinks(props.text) ? props.environmentId : null,
+      hasThreadLinks(props.text, configuredHostedAppUrl()) ? props.environmentId : null,
       linkedThreadEnvironmentIds(props.text, props.environmentId),
     ),
   );
@@ -3255,7 +3258,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     });
   };
   const resolveLinkedThread = (href: string) => {
-    const link = parseThreadLinkHref(href);
+    const link = parseThreadLinkHref(href, configuredHostedAppUrl());
     if (!link) return null;
     const resolved = resolveThreadLink(
       (atom) => appAtomRegistry.get(atom),
@@ -3400,7 +3403,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       );
       return;
     }
-    if (parseThreadLinkHref(href)) {
+    if (parseThreadLinkHref(href, configuredHostedAppUrl())) {
       const target = resolveLinkedThread(href);
       if (target) openThreadLink(target);
       return;
@@ -3548,7 +3551,10 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       const thread = resolveLinkedThread(href);
       if (thread) {
         if (actionId === "open-thread") onMarkdownLinkPress(href);
-        else if (actionId === "copy-thread-link") copyTextWithHaptic(hostedThreadLink(thread));
+        else if (actionId === "copy-thread-link") {
+          const link = hostedThreadLink(thread, configuredHostedAppUrl());
+          if (link) copyTextWithHaptic(link);
+        }
         return;
       }
       const deviceUrl = deviceLoopbackUrl(href);

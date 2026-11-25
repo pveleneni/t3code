@@ -152,17 +152,22 @@ describe("desktop update button state", () => {
 });
 
 describe("desktop update UI helpers", () => {
-  it.each(["owner/repo/extra", "owner#notes/repo", "owner/repo?tab=notes"])(
-    "falls back to upstream for an invalid configured repository: %s",
+  it.each(["owner/repo/extra", "owner#notes/repo", "owner/repo?tab=notes", undefined])(
+    "hides release links without a valid repository: %s",
     (repository) => {
-      expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBe(
-        "https://github.com/pingdotgg/t3code/releases",
-      );
-      expect(getDesktopUpdateReleaseUrl("1.2.3", repository)).toBe(
-        "https://github.com/pingdotgg/t3code/releases/tag/v1.2.3",
-      );
+      expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBeNull();
+      expect(getDesktopUpdateReleaseUrl("1.2.3", repository)).toBeNull();
     },
   );
+
+  it("uses a configured repository for release links", () => {
+    expect(getDesktopUpdateReleaseHistoryUrl("example/t3code")).toBe(
+      "https://github.com/example/t3code/releases",
+    );
+    expect(getDesktopUpdateReleaseUrl("1.2.3", "example/t3code")).toBe(
+      "https://github.com/example/t3code/releases/tag/v1.2.3",
+    );
+  });
 });
 
 describe("canCheckForUpdate", () => {
