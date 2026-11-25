@@ -24,6 +24,42 @@ function t3Home() {
 
 const isTransient = (status) => status === 408 || status === 429 || status >= 500;
 
+function configuredUrl(name) {
+  const raw = process.env[name]?.trim();
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    return url.protocol === "http:" || url.protocol === "https:" ? raw : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function configuredReleasesPage() {
+  const repo = configuredRepository();
+  return repo === undefined ? undefined : `https://github.com/${repo}/releases`;
+}
+
+function configuredRepository() {
+  const repo =
+    process.env.T3CODE_RELEASE_REPOSITORY?.trim() ||
+    process.env.T3CODE_GITHUB_REPOSITORY?.trim() ||
+    "";
+  return /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/u.test(repo) ? repo : undefined;
+}
+
+function releaseDownloadBaseUrl() {
+  const base = configuredUrl("T3CODE_RELEASE_BASE_URL");
+  if (base !== undefined) return base.replace(/\/+$/u, "");
+  const repo = configuredRepository();
+  if (repo === undefined) {
+    throw new Error(
+      "T3CODE_RELEASE_BASE_URL or T3CODE_RELEASE_REPOSITORY is required to download T3 Code.",
+    );
+  }
+  return `https://github.com/${repo}/releases/download`;
+}
+
 async function get(url) {
   let response;
   for (let attempt = 1; ; attempt++) {
@@ -77,9 +113,7 @@ async function download(url, file) {
 
 async function install(dir, key) {
   const archive = `t3-${version}-${key}.${process.platform === "win32" ? "zip" : "tar.gz"}`;
-  const base = (
-    process.env.T3CODE_RELEASE_BASE_URL || "https://github.com/pingdotgg/t3code/releases/download"
-  ).replace(/\/+$/, "");
+  const base = releaseDownloadBaseUrl();
   const sums = await (await get(`${base}/v${version}/SHA256SUMS`)).text();
   const expected = /^([0-9a-f]{64})\s+\*?(.+)$/im;
   const line = sums
@@ -177,9 +211,10 @@ function publish(staging, dir) {
 async function main() {
   const key = `${process.platform}-${process.arch}`;
   if (!SUPPORTED.includes(key)) {
+    const releases = configuredReleasesPage();
     throw new Error(
-      `no T3 Code CLI build is available for ${key} (supported: ${SUPPORTED.join(", ")}).\n` +
-        "The desktop app is at https://github.com/pingdotgg/t3code/releases",
+      `no T3 Code CLI build is available for ${key} (supported: ${SUPPORTED.join(", ")}).` +
+        (releases === undefined ? "" : ` Releases: ${releases}`),
     );
   }
   const dir = path.join(t3Home(), "runtime", "versions", version);

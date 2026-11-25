@@ -15,6 +15,7 @@ const { add, update, openExternal, commands, starred, page } = vi.hoisted(() => 
     events: new EventTarget(),
   },
 }));
+vi.mock("../productUrls", () => ({ PRODUCT_URLS: { githubRepository: "example/t3code" } }));
 vi.mock("./ui/toast", () => ({ toastManager: { add, update, close: vi.fn() } }));
 vi.mock("../localApi", () => ({ readLocalApi: () => ({ shell: { openExternal } }) }));
 vi.mock("../rpc/atomRegistry", () => ({ appAtomRegistry: {} }));
@@ -178,7 +179,7 @@ describe("recordPromptSent", () => {
     await (await startSession()).send();
     click(add.mock.lastCall?.[0].actionProps);
     await vi.advanceTimersByTimeAsync(0);
-    expect(openExternal).toHaveBeenCalledWith("https://github.com/pingdotgg/t3code");
+    expect(openExternal).toHaveBeenCalledWith("https://github.com/example/t3code");
     expect(update.mock.lastCall?.[1]).not.toMatchObject({
       actionProps: { children: "Open GitHub" },
     });

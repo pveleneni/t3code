@@ -200,6 +200,7 @@ import * as ConnectReachability from "./cloud/ConnectReachability.ts";
 import { pendingServiceUpdateExists } from "./cloud/updateHandoff.ts";
 import * as RelayTracing from "./cloud/relayTracing.ts";
 import * as CloudManagedEndpointRuntime from "./cloud/ManagedEndpointRuntime.ts";
+import * as SelfHostedTunnel from "./cloud/SelfHostedTunnel.ts";
 import * as RelayClientLedger from "./cloud/RelayClientLedger.ts";
 import {
   MANAGED_TUNNEL_FIRST_REGISTRATION_JITTER,
@@ -876,11 +877,11 @@ const layerRuntimeDependencies = layerRuntimeCoreDependencies.pipe(
   Layer.provideMerge(layerResourceDiagnostics),
   Layer.provideMerge(TraceDiagnostics.layer),
   Layer.provideMerge(TriageService.layer.pipe(Layer.provide(GitVcsDriver.layer))),
-  // Layers memoize by reference, so this is the same policy the settings layer reads.
-  Layer.provideMerge(AnalyticsService.layer.pipe(Layer.provide(ManagedPolicy.layer))),
+  Layer.provideMerge(AnalyticsService.layer),
   Layer.provideMerge(ExternalLauncher.layer),
   Layer.provideMerge(RemoteOpenTargets.layer),
   Layer.provideMerge(DirectEndpoints.layer.pipe(Layer.provide(layerServerEnvironment))),
+  Layer.provideMerge(SelfHostedTunnel.layer),
   Layer.provideMerge(ServerLifecycleEvents.layer),
   // GitVcsDriver.layer is memoized and some of its build sites live outside this file, so the
   // fetch interval goes in context here, before the first build captures it.
@@ -1182,9 +1183,37 @@ const layerMakeServer = Layer.unwrap(
           ),
         ).pipe(Layer.provide(NetService.layer))
       : Layer.empty;
+    const layerSelfHostedTunnel = Layer.effectDiscard(
+      Effect.gen(function* () {
+        const tunnel = yield* SelfHostedTunnel.SelfHostedTunnel;
+        if (!tunnel.enabled) return;
+        yield* Effect.logInfo(
+          "Direct self-hosted Cloudflare Tunnel mode is active; relay-managed tunnel startup is skipped",
+        );
+        const server = yield* HttpServer.HttpServer;
+        const address = server.address;
+        if (typeof address === "string" || !("port" in address)) return;
+        const localOrigin = `http://${loopbackUrlHostForAddress(address)}:${address.port}`;
+        yield* tunnel
+          .start(localOrigin)
+          .pipe(
+            Effect.catch((cause) =>
+              Effect.logWarning(
+                "Failed to start the self-hosted Cloudflare Tunnel; the server stays online",
+                { cause },
+              ),
+            ),
+          );
+      }),
+    );
     const layerCloudDesiredLinkReconcile = Layer.effectDiscard(
       Effect.gen(function* () {
         const cloudLink = yield* CloudLink.CloudLink;
+        // Direct mode owns the connector after startup; relay-managed startup would overwrite it.
+        if ((yield* SelfHostedTunnel.SelfHostedTunnel).enabled) {
+          yield* Deferred.succeed(cloudLinkParked, undefined).pipe(Effect.orDie);
+          return;
+        }
         // CloudLink unlinks on startup when the policy turns Connect off; nothing to restore.
         if (!ManagedLimits.allowsConnect(yield* ManagedPolicy.ManagedPolicy)) {
           yield* Deferred.succeed(cloudLinkParked, undefined).pipe(Effect.orDie);
@@ -1419,6 +1448,7 @@ const layerMakeServer = Layer.unwrap(
       layerRuntimeState.pipe(Layer.provide(layerLauncher)),
       layerTailscaleServe,
       layerCloudDesiredLinkReconcile,
+      layerSelfHostedTunnel,
       HeapSnapshot.layer,
     );
 

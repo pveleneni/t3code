@@ -30,17 +30,22 @@ export function relabelThreadLinks(
   messageEnvironmentId: EnvironmentId,
   title: (ref: ScopedThreadRef, label: string | undefined) => string | undefined,
   resolve: MFunctionType = mFallback,
+  hostedAppOrigin?: string | null,
 ): string {
-  return replaceThreadLinks(markdown, (written, label) => {
-    for (const ref of threadLinkCandidates(written, messageEnvironmentId)) {
-      const current = title(ref, label);
-      if (current === undefined) continue;
-      return formatThreadLink(
-        { environmentId: written.environmentId, threadId: ref.threadId },
-        current.trim() || label || ref.threadId,
-      );
-    }
-    if (label !== undefined && written.environmentId === null) return undefined;
-    return label?.trim() || unknownThreadLinkLabel(written, messageEnvironmentId, resolve);
-  });
+  return replaceThreadLinks(
+    markdown,
+    (written, label) => {
+      for (const ref of threadLinkCandidates(written, messageEnvironmentId)) {
+        const current = title(ref, label);
+        if (current === undefined) continue;
+        return formatThreadLink(
+          { environmentId: written.environmentId, threadId: ref.threadId },
+          current.trim() || label || ref.threadId,
+        );
+      }
+      if (label !== undefined && written.environmentId === null) return undefined;
+      return label?.trim() || unknownThreadLinkLabel(written, messageEnvironmentId, resolve);
+    },
+    hostedAppOrigin,
+  );
 }

@@ -7,6 +7,7 @@ import { assert, it } from "@effect/vitest";
 import {
   buildTriageContext,
   buildTriageLaunchPrompt,
+  buildTriageSeedPrompt,
   type TriageContextInput,
   TRIAGE_PLAYBOOK,
 } from "./triagePrompt.ts";
@@ -18,6 +19,43 @@ it("stays byte-identical to .github/triage/PLAYBOOK.md", () => {
     "../../../../.github/triage/PLAYBOOK.md",
   );
   assert.equal(TRIAGE_PLAYBOOK, NodeFS.readFileSync(canonicalPath, "utf8"));
+});
+
+it("uses configured repository URLs in generated prompts", () => {
+  const env = { T3CODE_GITHUB_REPOSITORY: "example/t3code" };
+  const seed = buildTriageSeedPrompt(
+    {
+      contextFilePath: "/tmp/context.md",
+      entry: { kind: "cli", cliVersion: "1", launchedAs: "t3" },
+    },
+    env,
+  );
+  assert.include(seed, "https://github.com/example/t3code");
+  assert.include(seed, "https://raw.githubusercontent.com/example/t3code/main/");
+  assert.notInclude(seed, "pingdotgg/t3code");
+
+  const context = buildTriageContext(
+    {
+      ...contextInput,
+      entry: { kind: "cli", cliVersion: "1", launchedAs: "t3" },
+      server: "running",
+    },
+    env,
+  );
+  assert.include(context, "- Repo: https://github.com/example/t3code");
+});
+
+it("omits upstream URLs when the repository is not configured", () => {
+  const seed = buildTriageSeedPrompt(
+    {
+      contextFilePath: "/tmp/context.md",
+      entry: { kind: "cli", cliVersion: "1", launchedAs: "t3" },
+    },
+    {},
+  );
+  assert.notInclude(seed, "t3.codes");
+  assert.notInclude(seed, "pingdotgg/t3code");
+  assert.include(seed, "T3CODE_GITHUB_REPOSITORY");
 });
 
 it("launch prompt stays a single argv-safe line naming the prompt file", () => {

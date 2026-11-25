@@ -79,7 +79,13 @@ export const resolveNewestVersion = Effect.fn("cli.update.resolve_newest")(funct
   const environment = yield* HostProcess.Environment;
   const githubToken = environment.GH_TOKEN?.trim() || environment.GITHUB_TOKEN?.trim() || undefined;
   for (let page = 1; page <= RELEASE_INDEX_MAX_PAGES; page += 1) {
-    const request = HttpClientRequest.get(cliReleaseIndexPageUrl(page)).pipe(
+    const indexUrl = cliReleaseIndexPageUrl(page, environment);
+    if (indexUrl === null) {
+      return yield* new CliUpdateError({
+        reason: "T3CODE_RELEASE_REPOSITORY is not configured, so releases cannot be checked.",
+      });
+    }
+    const request = HttpClientRequest.get(indexUrl).pipe(
       HttpClientRequest.setHeader("Accept", "application/vnd.github+json"),
     );
     const authenticatedRequest =

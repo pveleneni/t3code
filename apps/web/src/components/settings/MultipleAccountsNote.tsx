@@ -1,13 +1,17 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId, ProviderDriverKind } from "@t3tools/contracts";
+import { docsPageUrl } from "@t3tools/contracts/productUrls";
 import { T, Var } from "gt-react";
 import { InfoIcon } from "lucide-react";
 
+import { PRODUCT_URLS } from "../../productUrls";
 import { serverEnvironment } from "../../state/server";
 import { Alert, AlertDescription } from "../ui/alert";
 
-const MULTIPLE_ACCOUNTS_FAQ_URL =
-  "https://github.com/pingdotgg/t3code/blob/main/docs/user/faq.md#can-i-add-a-bunch-of-accounts-for-one-provider";
+const MULTIPLE_ACCOUNTS_FAQ_URL = docsPageUrl(
+  PRODUCT_URLS.docsBaseUrl,
+  "user/faq.md#can-i-add-a-bunch-of-accounts-for-one-provider",
+);
 
 const PROVIDER_NAMES = new Map<string, string>([
   ["codex", "Codex"],
@@ -36,15 +40,20 @@ export function MultipleAccountsNote({
       <AlertDescription>
         <p>
           <T>
-            We do not recommend managing multiple <Var>{providerName}</Var> accounts in T3 Code.{" "}
-            <a
-              href={MULTIPLE_ACCOUNTS_FAQ_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="underline underline-offset-2 hover:text-foreground"
-            >
-              More info
-            </a>
+            We do not recommend managing multiple <Var>{providerName}</Var> accounts in T3 Code.
+            {MULTIPLE_ACCOUNTS_FAQ_URL ? (
+              <>
+                {" "}
+                <a
+                  href={MULTIPLE_ACCOUNTS_FAQ_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  More info
+                </a>
+              </>
+            ) : null}
           </T>
         </p>
       </AlertDescription>

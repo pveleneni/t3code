@@ -1,4 +1,9 @@
 import type { DesktopUpdateState } from "@t3tools/contracts";
+import {
+  githubReleasesUrl,
+  repositorySlug,
+  runtimeProductEnvironment,
+} from "@t3tools/contracts/productUrls";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -20,7 +25,14 @@ import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopObservability from "./DesktopObservability.ts";
 import * as DesktopState from "./DesktopState.ts";
 
-const RELEASES_URL = "https://github.com/pingdotgg/t3code/releases";
+const desktopEnvironment = runtimeProductEnvironment();
+const RELEASES_URL = githubReleasesUrl(
+  repositorySlug(
+    desktopEnvironment.T3CODE_RELEASE_REPOSITORY ??
+      desktopEnvironment.T3CODE_GITHUB_REPOSITORY ??
+      desktopEnvironment.GITHUB_REPOSITORY,
+  ),
+);
 const LAST_STARTED_VERSION_FILE = "desktop-last-started-version";
 // Buttons are plain links to this host; will-navigate cancels them and runs the action.
 const ACTION_ORIGIN = "https://startup-recovery.invalid";
@@ -127,7 +139,8 @@ function describeOffer(offer: StartupRecoveryOffer): { text: string; action: str
     case "Releases":
       return {
         text: m(msg("Get a different version from the releases page.")),
-        action: actionLink("releases", m(msg("Open releases")), true),
+        action:
+          RELEASES_URL === undefined ? "" : actionLink("releases", m(msg("Open releases")), true),
       };
     case "ManagedPolicy":
       return {
@@ -256,12 +269,12 @@ export const listen: Effect.Effect<
         return;
       }
       case "reinstall":
-        if (current._tag === "Reinstall") {
+        if (current._tag === "Reinstall" && RELEASES_URL !== undefined) {
           yield* electronShell.openExternal(`${RELEASES_URL}/tag/v${current.version}`);
         }
         return;
       case "releases":
-        yield* electronShell.openExternal(RELEASES_URL);
+        if (RELEASES_URL !== undefined) yield* electronShell.openExternal(RELEASES_URL);
         return;
       case "copy": {
         const failure = yield* Ref.get(failureRef);

@@ -165,14 +165,16 @@ function RunOnComputer({ command }: { readonly command: string }) {
         <T>Run on your computer:</T>
       </p>
       <InstallT3Commands command={command} className="mt-2" />
-      <a
-        className="mt-2 inline-block text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-        href={DESKTOP_DOWNLOAD_URL}
-        target="_blank"
-        rel="noreferrer noopener"
-      >
-        <T>Or download the desktop app</T>
-      </a>
+      {DESKTOP_DOWNLOAD_URL ? (
+        <a
+          className="mt-2 inline-block text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          href={DESKTOP_DOWNLOAD_URL}
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          <T>Or download the desktop app</T>
+        </a>
+      ) : null}
     </>
   );
 }

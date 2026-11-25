@@ -190,9 +190,7 @@ const layerCapabilities = Layer.effectContext(
           bearerToken: Effect.succeedNone,
         }),
       ),
-      Context.add(ClientCapabilities.AnalyticsDevice, {
-        id: storage.loadOrCreateAnalyticsDeviceId.pipe(Effect.option),
-      }),
+      // The relay device id already persists in secure storage.
       Context.add(
         ClientCapabilities.RelayDeviceIdentity,
         ClientCapabilities.RelayDeviceIdentity.of({

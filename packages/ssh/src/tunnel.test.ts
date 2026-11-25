@@ -98,6 +98,8 @@ function commandArgs(command: ChildProcess.Command): ReadonlyArray<string> {
   return command._tag === "StandardCommand" ? command.args.map(String) : [];
 }
 
+process.env.T3CODE_RELEASE_BASE_URL ??= "http://127.0.0.1:9";
+
 const ARCHIVE = { archiveVersion: "1.2.3-preview.20260911.4" } as const;
 
 // Emulates `t3 serve`: it takes the home owner lock at startup, then binds
@@ -299,10 +301,9 @@ describe("ssh tunnel scripts", () => {
         archiveVersion,
       );
     }
-    assert.include(
-      SshTunnel.buildRemoteT3RunnerScript(ARCHIVE),
-      "T3_ARCHIVE_VERSION='1.2.3-preview.20260911.4'",
-    );
+    const script = SshTunnel.buildRemoteT3RunnerScript(ARCHIVE);
+    assert.include(script, "T3_ARCHIVE_VERSION='1.2.3-preview.20260911.4'");
+    assert.notInclude(script, "t3.codes/install");
   });
 
   it.each([
@@ -337,7 +338,7 @@ describe("ssh tunnel scripts", () => {
           assert.include(result.stderr, "download attempt");
           // A bare curl error does not tell the user that t3 itself could not be downloaded.
           assert.include(result.stderr, ARCHIVE.archiveVersion);
-          assert.include(result.stderr, "https://github.com/pingdotgg/t3code/releases/download");
+          assert.include(result.stderr, "http://127.0.0.1:9");
         } else {
           assert.notInclude(result.stderr, "download attempt");
           assert.include(result.stderr, "has no t3 release archive.");

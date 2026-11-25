@@ -18,4 +18,13 @@ describe("provider auth return destinations", () => {
     "t3code://app/welcome/../evil",
     "https://attacker.example/welcome",
   ])("rejects %s", (url) => expect(providerAuthReturnUrl(url)).toBeUndefined());
+
+  it("keeps loopback returns but rejects hosted ones when no origin is configured", () => {
+    expect(providerAuthReturnUrl("http://127.0.0.1:5173/welcome#agents:machine-id", "")).toBe(
+      "http://127.0.0.1:5173/welcome#agents:machine-id",
+    );
+    expect(providerAuthReturnUrl("https://app.example.com/welcome#agents:machine-id", "")).toBe(
+      undefined,
+    );
+  });
 });

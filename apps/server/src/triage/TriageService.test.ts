@@ -16,6 +16,9 @@ import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as TriageService from "./TriageService.ts";
 import { pickSourceRef } from "./TriageService.ts";
 
+// Tests use a repository slug; production requires an explicit T3CODE_GITHUB_REPOSITORY.
+process.env.T3CODE_GITHUB_REPOSITORY ??= "example/t3code";
+
 const MAIN = "a1dc856ee61278d0199c36d4bcdef5fdea4d21fe\trefs/heads/main";
 
 it("clones the server's release tag, peeling annotated tags to their commit", () => {

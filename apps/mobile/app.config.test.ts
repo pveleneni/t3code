@@ -1,4 +1,3 @@
-import { DEFAULT_HOSTED_APP_URL } from "@t3tools/shared/connectAuth";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 
 import appleAppSiteAssociation from "../web/public/.well-known/apple-app-site-association.json";
@@ -6,16 +5,22 @@ import assetLinks from "../web/public/.well-known/assetlinks.json";
 
 // Keep config parsing independent of local env files and build credentials.
 vi.mock("../../scripts/lib/public-config.ts", () => ({
-  loadRepoEnv: () => ({ APP_VARIANT: process.env.APP_VARIANT }),
+  loadRepoEnv: () => ({
+    APP_VARIANT: process.env.APP_VARIANT,
+    T3CODE_HOSTED_APP_URL: process.env.T3CODE_HOSTED_APP_URL,
+    T3CODE_CLERK_PASSKEY_RELYING_PARTY: process.env.T3CODE_CLERK_PASSKEY_RELYING_PARTY,
+  }),
 }));
 
 afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-async function loadConfig(variant: string | undefined) {
+async function loadConfig(variant: string | undefined, hosted = true, passkeys = true) {
   vi.resetModules();
   vi.stubEnv("APP_VARIANT", variant);
+  if (hosted) vi.stubEnv("T3CODE_HOSTED_APP_URL", "https://app.example.com");
+  if (passkeys) vi.stubEnv("T3CODE_CLERK_PASSKEY_RELYING_PARTY", "clerk.example.com");
   return (await import("./app.config.ts")).default;
 }
 
@@ -34,14 +39,23 @@ it.each([
   const config = await loadConfig(value);
   expect(config.ios?.bundleIdentifier).toBe(identifier);
   expect(config.android?.package).toBe(identifier);
-  // Copied thread links open this app only while app.t3.codes lists it.
-  const host = new URL(DEFAULT_HOSTED_APP_URL).host;
-  expect(config.ios?.associatedDomains).toContain(`applinks:${host}`);
+  // Copied thread links open this app only while the configured hosted app lists it.
+  expect(config.ios?.associatedDomains).toContain("applinks:app.example.com");
+  expect(config.ios?.associatedDomains).toContain("applinks:clerk.example.com");
+  expect(config.ios?.associatedDomains).toContain("webcredentials:clerk.example.com");
   expect(appleAppSiteAssociation.applinks.details[0]?.appIDs).toContain(
     `${config.ios?.appleTeamId}.${identifier}`,
   );
   expect(config.android?.intentFilters?.[0]?.data).toEqual([
-    { scheme: "https", host, pathPrefix: "/threads/" },
+    { scheme: "https", host: "app.example.com", pathPrefix: "/threads/" },
   ]);
   expect(assetLinks.map((link) => link.target.package_name)).toContain(identifier);
+  expect(config.extra?.hostedAppUrl).toBe("https://app.example.com");
+});
+
+it("omits passkey and hosted app deep-link config when unconfigured", async () => {
+  const config = await loadConfig("production", false, false);
+  expect(config.ios?.associatedDomains).toEqual([]);
+  expect(config.android?.intentFilters).toEqual([]);
+  expect(config.extra?.hostedAppUrl).toBeNull();
 });

@@ -182,9 +182,8 @@ export const threadLinkFor = (
 ): string => {
   const hostedAppUrl = scope.client?.hostedAppUrl;
   const ref = { environmentId: scope.environmentId, threadId };
-  return hostedAppUrl === undefined
-    ? formatThreadLink(ref, title)
-    : hostedThreadLink(ref, hostedAppUrl);
+  const hosted = hostedAppUrl === undefined ? null : hostedThreadLink(ref, hostedAppUrl);
+  return hosted ?? formatThreadLink(ref, title);
 };
 
 export class McpInvocationContext extends Context.Service<

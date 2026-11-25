@@ -78,7 +78,11 @@ describe("resolveThreadReferenceCopyTarget", () => {
   });
 
   it("copies a thread chip that pastes back as the same thread on its machine", () => {
-    const target = resolveThreadReferenceCopyTarget({ ...thread, linkedPullRequestUrl: null });
+    const target = resolveThreadReferenceCopyTarget({
+      ...thread,
+      hostedAppUrl: "https://app.example.com",
+      linkedPullRequestUrl: null,
+    });
 
     expect(target).toMatchObject({
       kind: "thread",
@@ -99,17 +103,31 @@ describe("resolveThreadReferenceCopyTarget", () => {
       ],
     });
     // The plain text opens the thread anywhere and pastes back as the copied record's chip.
-    expect(target!.value).toBe("https://app.t3.codes/threads/env-1/thread-1");
-    expect(threadLinkContextReferences(target!.value, pasted!.records, () => undefined)).toEqual({
+    expect(target!.value).toBe("https://app.example.com/threads/env-1/thread-1");
+    expect(
+      threadLinkContextReferences(
+        target!.value,
+        pasted!.records,
+        () => undefined,
+        undefined,
+        "https://app.example.com",
+      ),
+    ).toEqual({
       text: `[Fix the login flow](t3-context://v1/thread/${pasted!.records[0]!.contextId})`,
       records: pasted!.records,
     });
   });
 
+  it("uses a local protocol link when no hosted app is configured", () => {
+    expect(resolveThreadReferenceCopyTarget({ ...thread, hostedAppUrl: "" })?.value).toBe(
+      "<t3-thread://v2/env-1/thread-1>",
+    );
+  });
+
   it("links through the build's hosted app", () => {
     expect(
-      resolveThreadReferenceCopyTarget({ ...thread, hostedAppUrl: "https://preview.t3.codes" })
+      resolveThreadReferenceCopyTarget({ ...thread, hostedAppUrl: "https://preview.example.com" })
         ?.value,
-    ).toBe("https://preview.t3.codes/threads/env-1/thread-1");
+    ).toBe("https://preview.example.com/threads/env-1/thread-1");
   });
 });

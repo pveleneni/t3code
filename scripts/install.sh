@@ -2,7 +2,7 @@
 # Installs the T3 Code CLI from a GitHub Release archive. Needs only sh, tar,
 # sha256sum or shasum, and curl or wget; no Node, npm, or compiler.
 #
-#   curl -fsSL https://t3.codes/install.sh | sh
+#   curl -fsSL "$T3CODE_INSTALL_URL" | sh
 #
 # Environment:
 #   T3CODE_CHANNEL           release train to follow: stable, nightly, or preview
@@ -10,15 +10,28 @@
 #   T3CODE_VERSION           exact version to install (overrides T3CODE_CHANNEL)
 #   T3CODE_HOME              T3 home directory (default: ~/.t3)
 #   T3CODE_INSTALL_BIN_DIR   where the `t3` command goes (default: ~/.local/bin)
-#   T3CODE_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
+#   T3CODE_RELEASE_BASE_URL  mirror for releases/download
+#   T3CODE_RELEASE_REPOSITORY  GitHub owner/repo used for release lookup
+#   T3CODE_GITHUB_REPOSITORY   fallback when no release repository is set
 #
 # The archive is unpacked into $T3CODE_HOME/runtime/versions/<version>, the
 # same layout `t3 service install` uses, so the service reuses this download
 # instead of fetching the release again.
 set -eu
 
-repo="pingdotgg/t3code"
-base_url="${T3CODE_RELEASE_BASE_URL:-https://github.com/${repo}/releases/download}"
+fail() {
+  printf '\nt3 install: %s\n' "$1" >&2
+  exit 1
+}
+
+repo="${T3CODE_RELEASE_REPOSITORY:-${T3CODE_GITHUB_REPOSITORY:-}}"
+if [ -n "${T3CODE_RELEASE_BASE_URL:-}" ]; then
+  base_url="${T3CODE_RELEASE_BASE_URL}"
+elif [ -n "$repo" ]; then
+  base_url="https://github.com/${repo}/releases/download"
+else
+  fail "set T3CODE_RELEASE_BASE_URL or T3CODE_RELEASE_REPOSITORY before installing"
+fi
 t3_home="${T3CODE_HOME:-$HOME/.t3}"
 case "$t3_home" in
   /*) ;;
@@ -34,11 +47,6 @@ while [ "${t3_home%/}" != "$t3_home" ] && [ "$t3_home" != / ]; do t3_home="${t3_
 while [ "${bin_dir%/}" != "$bin_dir" ] && [ "$bin_dir" != / ]; do bin_dir="${bin_dir%/}"; done
 # Absolute, so the PATH hint never adds a folder that changes with the working directory.
 case "$bin_dir" in /*) ;; *) bin_dir="$PWD/$bin_dir" ;; esac
-
-fail() {
-  printf '\nt3 install: %s\n' "$1" >&2
-  exit 1
-}
 
 # ANSI stays on stderr, so `curl ... | sh` still gets progress.
 interactive=false
@@ -171,7 +179,7 @@ case "$(uname -m)" in
   *) fail "unsupported architecture $(uname -m)" ;;
 esac
 if [ "${platform}-${arch}" = darwin-x64 ]; then
-  fail "there is no t3 CLI for Intel Macs. Install the desktop app from https://t3.codes/download, or run a server from source: https://github.com/${repo}/blob/main/docs/user/install.md#intel-macs"
+  fail "there is no t3 CLI for Intel Macs. ${T3CODE_DOWNLOAD_URL:+Install the desktop app from ${T3CODE_DOWNLOAD_URL}, or }run a server from source."
 fi
 command -v tar >/dev/null 2>&1 || fail "tar is required"
 if command -v sha256sum >/dev/null 2>&1; then
@@ -185,6 +193,7 @@ fi
 channel="${T3CODE_CHANNEL:-stable}"
 version="${T3CODE_VERSION:-}"
 if [ -z "$version" ]; then
+  [ -n "$repo" ] || fail "set T3CODE_VERSION or T3CODE_RELEASE_REPOSITORY to choose a release"
   case "$channel" in
     stable) tag_pattern='v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)' ;;
     nightly | preview) tag_pattern="v\([0-9][^\"]*-${channel}\.[0-9]*\.[0-9]*\)" ;;

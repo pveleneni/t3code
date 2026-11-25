@@ -1,11 +1,12 @@
 import { T } from "gt-react";
 import { cn } from "~/lib/utils";
 
+import { PRODUCT_URLS } from "../productUrls";
 import { CommandBlock } from "./CommandBlock";
 
 /**
  * Setup steps for another computer: install `t3`, then run `command`. Both installers are shown
- * because the browser showing this is often not the computer being set up.
+ * when configured because the browser showing this is often not the computer being set up.
  */
 export function InstallT3Commands({
   command,
@@ -16,10 +17,18 @@ export function InstallT3Commands({
 }) {
   return (
     <div className={cn("space-y-2", className)}>
-      <p className="text-xs text-muted-foreground">macOS, Linux</p>
-      <CommandBlock command="curl -fsSL https://t3.codes/install.sh | sh" />
-      <p className="text-xs text-muted-foreground">Windows (PowerShell)</p>
-      <CommandBlock command="irm https://t3.codes/install.ps1 | iex" />
+      {PRODUCT_URLS.installUrl ? (
+        <>
+          <p className="text-xs text-muted-foreground">macOS, Linux</p>
+          <CommandBlock command={`curl -fsSL ${PRODUCT_URLS.installUrl} | sh`} />
+        </>
+      ) : null}
+      {PRODUCT_URLS.installPs1Url ? (
+        <>
+          <p className="text-xs text-muted-foreground">Windows (PowerShell)</p>
+          <CommandBlock command={`irm ${PRODUCT_URLS.installPs1Url} | iex`} />
+        </>
+      ) : null}
       <p className="text-xs text-muted-foreground">
         <T>Then</T>
       </p>

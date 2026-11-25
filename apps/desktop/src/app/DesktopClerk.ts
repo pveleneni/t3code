@@ -1,6 +1,7 @@
 import { createClerkBridge } from "@clerk/electron";
 import * as NodeURL from "node:url";
 import { storage } from "@clerk/electron/storage";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -103,6 +104,8 @@ export const make = Effect.gen(function* () {
   const electronApp = yield* ElectronApp.ElectronApp;
   const shell = yield* ElectronShell.ElectronShell;
   const path = yield* Path.Path;
+  const configuredUrl = yield* Config.String("T3CODE_HOSTED_APP_URL").pipe(Config.option);
+  const hostedAppUrl = Option.isSome(configuredUrl) ? configuredUrl.value.trim() : undefined;
 
   // Must not yield: the bridge registers a scheme Electron rejects once ready.
   const userDataPath = yield* DesktopUserData.resolveUserDataPath(environment);
@@ -172,7 +175,7 @@ export const make = Effect.gen(function* () {
 
       const startProviderAuthHandoff = (value: string | undefined) => {
         if (!value) return false;
-        const request = readCodexAuthHandoff(value, environment.isDevelopment);
+        const request = readCodexAuthHandoff(value, environment.isDevelopment, hostedAppUrl);
         if (!request) return false;
         void runPromise(
           Effect.gen(function* () {
@@ -182,7 +185,7 @@ export const make = Effect.gen(function* () {
                 receiveCodexAuthCallback(
                   request.authorizationUrl,
                   (url) => runPromise(shell.openExternal(url)),
-                  (callbackUrl) => codexAuthDeliveryUrl(request, callbackUrl),
+                  (callbackUrl) => codexAuthDeliveryUrl(request, callbackUrl, hostedAppUrl),
                   signal,
                 ),
               catch: () =>
@@ -198,7 +201,7 @@ export const make = Effect.gen(function* () {
         return true;
       };
       const resumeProviderAuth = (value: string | undefined) => {
-        const destination = providerAuthReturnUrl(value);
+        const destination = providerAuthReturnUrl(value, hostedAppUrl);
         const expectedOrigin = `${ElectronProtocol.getDesktopScheme(environment.isDevelopment)}://app`;
         if (!destination?.startsWith(`${expectedOrigin}/`)) return false;
         void runPromise(
@@ -216,7 +219,10 @@ export const make = Effect.gen(function* () {
         return true;
       };
       const openAppLink = (value: string | undefined) => {
-        if (!value || (promptLinkAppPath(value) === null && readPairingAppLink(value) === null))
+        if (
+          !value ||
+          (promptLinkAppPath(value, hostedAppUrl) === null && readPairingAppLink(value) === null)
+        )
           return false;
         void runPromise(webLinks.receive(value));
         return true;

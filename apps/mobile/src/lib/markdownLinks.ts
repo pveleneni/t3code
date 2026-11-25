@@ -7,6 +7,7 @@ import {
 } from "@t3tools/shared/markdownLinks";
 import { parseThreadLinkHref } from "@t3tools/shared/threadLinks";
 import { videoMimeType } from "@t3tools/shared/video";
+import { configuredHostedAppUrl } from "./hostedAppUrl";
 
 import type { MARKDOWN_FILE_ICON_SOURCES } from "./markdownFileIcons.generated";
 
@@ -326,7 +327,8 @@ export function resolveMarkdownLinkPresentation(href: string): MarkdownLinkPrese
   return {
     kind: "link",
     href:
-      /^(?:mailto|tel):/i.test(normalized) || parseThreadLinkHref(normalized) !== null
+      /^(?:mailto|tel):/i.test(normalized) ||
+      parseThreadLinkHref(normalized, configuredHostedAppUrl()) !== null
         ? normalized
         : null,
   };

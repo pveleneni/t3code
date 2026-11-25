@@ -679,8 +679,11 @@ export function environmentThemeFileHasColors(file: EnvironmentThemeFile): boole
   );
 }
 
-/** tailnet means this machine's Tailscale interface; other private addresses are lan. */
-export const ServerDirectEndpointKind = Schema.Literals(["lan", "tailnet"]);
+/**
+ * tailnet means this machine's Tailscale interface; other private addresses are lan.
+ * public means a self-hosted HTTPS endpoint reachable from any network.
+ */
+export const ServerDirectEndpointKind = Schema.Literals(["lan", "tailnet", "public"]);
 export type ServerDirectEndpointKind = typeof ServerDirectEndpointKind.Type;
 
 export const ServerDirectEndpoint = Schema.Struct({
@@ -713,8 +716,6 @@ export const ServerConfig = Schema.Struct({
   environment: ExecutionEnvironmentDescriptor,
   auth: ServerAuthDescriptor,
   cwd: TrimmedNonEmptyString,
-  /** The machine's own name, which file URIs from its shells may carry. Older servers omit it. */
-  hostname: Schema.optionalKey(Schema.String),
   keybindingsConfigPath: TrimmedNonEmptyString,
   keybindings: ResolvedKeybindingsConfig,
   issues: ServerConfigIssues,

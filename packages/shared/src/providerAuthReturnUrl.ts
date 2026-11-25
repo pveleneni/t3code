@@ -1,13 +1,18 @@
+import { configuredHostedAppOrigin, normalizeHostedAppOrigin } from "./connectAuth.ts";
 import { isLoopbackHost } from "./preview.ts";
 
-export function providerAuthReturnUrl(value: string | undefined): string | undefined {
+export function providerAuthReturnUrl(
+  value: string | undefined,
+  hostedAppOrigin: string | null = configuredHostedAppOrigin(),
+): string | undefined {
   if (!value) return undefined;
+  const origin = normalizeHostedAppOrigin(hostedAppOrigin ?? undefined);
   try {
     const url = new URL(value);
     const desktop = ["t3code:", "t3code-dev:"].includes(url.protocol) && url.host === "app";
     const web =
       ["http:", "https:"].includes(url.protocol) &&
-      (isLoopbackHost(url.hostname) || url.origin === "https://app.t3.codes");
+      (isLoopbackHost(url.hostname) || (origin !== null && url.origin === origin));
     if (
       url.username ||
       url.password ||

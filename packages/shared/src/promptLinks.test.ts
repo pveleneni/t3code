@@ -1,5 +1,5 @@
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
   buildNewThreadLink,
@@ -11,6 +11,9 @@ import {
   withoutPromptLinkParams,
 } from "./promptLinks.ts";
 import { hostedThreadLink } from "./threadLinks.ts";
+
+beforeEach(() => vi.stubEnv("T3CODE_HOSTED_APP_URL", "https://app.example.com"));
+afterEach(() => vi.unstubAllEnvs());
 
 describe("sanitizeLinkedPrompt", () => {
   it("removes characters a reader cannot see and counts them", () => {
@@ -93,6 +96,12 @@ describe("thread links", () => {
 });
 
 describe("link round trips", () => {
+  it("builds no link when no hosted origin is configured", () => {
+    vi.stubEnv("T3CODE_HOSTED_APP_URL", "");
+    expect(buildNewThreadLink({ prompt: "hi" })).toBeNull();
+    expect(promptLinkAppPath("https://app.example.com/new?prompt=hi")).toBeNull();
+  });
+
   it("builds a link that parses back to the same prompt", () => {
     const link = buildNewThreadLink({
       prompt: "Swear count & rating?",
@@ -100,9 +109,9 @@ describe("link round trips", () => {
       provider: "claudeAgent",
       model: "opus",
     });
-    const path = promptLinkAppPath(link);
-    expect(path).toBe(new URL(link).pathname + new URL(link).search);
-    const parsed = parseNewThreadLink(new URL(link).search);
+    const path = promptLinkAppPath(link!);
+    expect(path).toBe(new URL(link!).pathname + new URL(link!).search);
+    const parsed = parseNewThreadLink(new URL(link!).search);
     expect(parsed.ok && parsed.value.kind === "new" && parsed.value.prompt.text).toBe(
       "Swear count & rating?",
     );
@@ -113,7 +122,7 @@ describe("link round trips", () => {
       environmentId: EnvironmentId.make("env-1"),
       threadId: ThreadId.make("mcp:1"),
     });
-    const path = promptLinkAppPath(link);
+    const path = promptLinkAppPath(link!);
     expect(path).toBe("/env-1/mcp%3A1");
     const deepLink = promptLinkDeepLink(path!);
     expect(deepLink).toBe("t3code://threads/env-1/mcp%3A1");
@@ -123,19 +132,19 @@ describe("link round trips", () => {
   it("maps app scheme and hosted links to in-app paths, and nothing else", () => {
     expect(promptLinkAppPath("t3code://new?prompt=hi")).toBe("/new?prompt=hi");
     expect(promptLinkAppPath("t3code-dev://threads/env-1/thread-1")).toBe("/env-1/thread-1");
-    expect(promptLinkAppPath("https://app.t3.codes/env-1/thread-1?prompt=go")).toBe(
+    expect(promptLinkAppPath("https://app.example.com/env-1/thread-1?prompt=go")).toBe(
       "/env-1/thread-1?prompt=go",
     );
-    expect(promptLinkAppPath("https://app.t3.codes/threads/env-1/thread-1")).toBe(
+    expect(promptLinkAppPath("https://app.example.com/threads/env-1/thread-1")).toBe(
       "/env-1/thread-1",
     );
-    expect(promptLinkAppPath("https://app.t3.codes/threads/env-1/thread-1?prompt=go")).toBe(
+    expect(promptLinkAppPath("https://app.example.com/threads/env-1/thread-1?prompt=go")).toBe(
       "/env-1/thread-1?prompt=go",
     );
     // The web app's own thread route, reloaded, is no link.
-    expect(promptLinkAppPath("https://app.t3.codes/env-1/thread-1")).toBeNull();
-    expect(promptLinkAppPath("https://app.t3.codes/threads/env-1")).toBeNull();
-    expect(promptLinkAppPath("https://app.t3.codes/settings/general")).toBeNull();
+    expect(promptLinkAppPath("https://app.example.com/env-1/thread-1")).toBeNull();
+    expect(promptLinkAppPath("https://app.example.com/threads/env-1")).toBeNull();
+    expect(promptLinkAppPath("https://app.example.com/settings/general")).toBeNull();
     expect(promptLinkAppPath("https://evil.test/new?prompt=hi")).toBeNull();
     expect(promptLinkAppPath("t3code://app/index.html")).toBeNull();
   });
@@ -144,8 +153,8 @@ describe("link round trips", () => {
     const canParse = URL.canParse;
     Reflect.deleteProperty(URL, "canParse");
     try {
-      expect(promptLinkAppPath("https://app.t3.codes/new?prompt=hi")).toBe("/new?prompt=hi");
-      expect(promptLinkAppPath("https://app.t3.codes/")).toBeNull();
+      expect(promptLinkAppPath("https://app.example.com/new?prompt=hi")).toBe("/new?prompt=hi");
+      expect(promptLinkAppPath("https://app.example.com/")).toBeNull();
       expect(promptLinkAppPath("not a url")).toBeNull();
     } finally {
       URL.canParse = canParse;
