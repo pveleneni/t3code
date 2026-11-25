@@ -1,3 +1,53 @@
+> [!NOTE]
+> **This is a self-hosted fork of T3 Code.** Nothing here changes T3's hosted service. The fork only removes telemetry defaults (nothing is sent unless you opt in with your own PostHog) and lets you supply your own Cloudflare and Clerk API keys instead of relying on T3's services. See [Using this fork](#using-this-fork) for setup.
+
+## Using this fork
+
+Nothing here changes T3's hosted service. This fork removes telemetry defaults and makes Cloudflare Tunnel and Clerk auth configurable with your own API keys instead of relying on T3's services. Use a build made from this repository: the published T3 Code apps point at T3's hosted service.
+
+### Get a build
+
+Build from source with the [development runbook](./docs/operations/00_development.md#first-checkout) (`vp i`, then `vp run build:desktop` for the CLI and desktop app). Before building, copy `.env.build.example` to `.env` (or `.env.local`) in the repository root and fill in your Clerk keys, hosted app and relay URLs, and install/download links. Those values are compiled into the web, desktop, and CLI artifacts, so changing them later means rebuilding. The tag-driven release workflow described in the [self-hosting runbook](./docs/operations/self-hosting.md) is not included in this fork; add your own GitHub Actions workflow if you want tag pushes to publish releases.
+
+### Configure an installed build
+
+Copy `.env.example` to `~/.t3/.env` (Windows: `%USERPROFILE%\.t3\.env`), uncomment what you need, and restart the server with `t3 service restart` (or stop and start `t3`). No rebuild is needed. `$HOME/.env` also works, but only `T3CODE_*` names are read from it; an explicit `T3CODE_X=... t3` overrides both files.
+
+```dotenv
+# ~/.t3/.env — nothing is required for local-only use
+T3CODE_CLERK_PUBLISHABLE_KEY=pk_test_your_key
+T3CODE_CLERK_JWT_TEMPLATE=your_jwt_template
+T3CODE_CLERK_CLI_OAUTH_CLIENT_ID=your_oauth_client_id
+T3CODE_HOSTED_APP_URL=https://t3.example.com
+T3CODE_RELAY_URL=https://relay.example.com
+
+T3CODE_CLOUDFLARE_API_TOKEN=your_token       # secret; scope to one zone
+T3CODE_CLOUDFLARE_ACCOUNT_ID=your_account_id
+T3CODE_CLOUDFLARE_ZONE_ID=your_zone_id
+T3CODE_CLOUDFLARE_TUNNEL_HOSTNAME=t3.example.com
+T3CODE_CLOUDFLARE_TUNNEL_NAME=t3code-fork   # optional
+
+T3CODE_TELEMETRY_ENABLED=true
+T3CODE_POSTHOG_KEY=phc_your_project_key
+T3CODE_POSTHOG_HOST=https://posthog.example.com
+```
+
+The Cloudflare token needs **Tunnel:Edit** and **DNS:Edit** on the zone; with all tunnel variables set, `t3` provisions the tunnel and DNS record on first start. Telemetry is off unless the flag, key, and host are all set, and events go only to your PostHog project. See [self-hosting](./docs/operations/self-hosting.md), the [tunnel runbook](./docs/operations/self-hosted-cloudflare-tunnel.md), and [telemetry](./docs/user/telemetry.md) for the full list of variables and behavior.
+
+### Mobile apps
+
+The iOS and Android apps from the official stores cannot be pointed at this fork: `EXPO_PUBLIC_*` values and the Clerk passkey relying party are compiled into the app, so using your own domain and auth requires building your own app. Mobile builds also need developer credentials — an Apple Developer Program membership for iOS signing and entitlements, and a Google Play developer account to publish on Android. You are free to fork this repository and publish your own app under your own branding; see [mobile build setup](./apps/mobile/README.md) and [TRADEMARK.md](./TRADEMARK.md).
+
+### Reference
+
+- [Self-hosting this fork](./docs/operations/self-hosting.md)
+- [Cloudflare tunnel](./docs/operations/self-hosted-cloudflare-tunnel.md)
+- [Telemetry](./docs/user/telemetry.md)
+
+---
+
+*T3 README starts here — everything below is unchanged upstream content.*
+
 <p align="center">
   <a href="https://t3.codes">
     <img src="./assets/prod/t3-black-web-icon-192x192.png" width="80" height="80" alt="T3 Code logo" />
