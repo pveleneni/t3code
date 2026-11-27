@@ -4,6 +4,7 @@ import {
   AuthTokenExchangeGrantType,
   AuthEnvironmentBootstrapTokenType,
   AuthAccessTokenType,
+  AuthClerkSessionTokenType,
   EnvironmentHttpApi,
 } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
@@ -23,6 +24,7 @@ import * as HttpRouter from "effect/http/HttpRouter";
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ClerkSessionVerifier from "./ClerkSessionVerifier.ts";
 import * as EnvironmentAuth from "./EnvironmentAuth.ts";
 import { makeDpopKey } from "./dpop.testkit.ts";
 import * as ServerSecretStore from "./ServerSecretStore.ts";
@@ -45,26 +47,43 @@ const layerConfig = Layer.effect(
   }),
 ).pipe(Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-auth-http-test-" })));
 
-const layerEnvironmentAuth = EnvironmentAuth.layer.pipe(
-  Layer.provide(ManagedPolicy.layerTest()),
-  Layer.provide(SqlitePersistence.layerMemory),
-  Layer.provide(ServerSecretStore.layer),
-  Layer.provide(ServerEnvironment.layerIdentity),
-  Layer.provide(layerConfig),
-);
-const layerRoutes = HttpApiBuilder.layer(AuthTestApi).pipe(
-  Layer.provide(AuthHttp.layer),
-  Layer.provide(AuthHttp.layerAuthenticatedAuth),
-  Layer.provideMerge(layerEnvironmentAuth),
-  Layer.provide(layerConfig),
-  Layer.provideMerge(
-    HttpPlatform.layer.pipe(
-      Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
-      Layer.provideMerge(Etag.layerWeak),
+const layerEnvironmentAuth = (clerk: Layer.Layer<ClerkSessionVerifier.ClerkSessionVerifier>) =>
+  EnvironmentAuth.layerWithoutClerk.pipe(
+    Layer.provide(clerk),
+    Layer.provide(ManagedPolicy.layerTest()),
+    Layer.provide(SqlitePersistence.layerMemory),
+    Layer.provide(ServerSecretStore.layer),
+    Layer.provide(ServerEnvironment.layerIdentity),
+    Layer.provide(layerConfig),
+  );
+const clerkVerifier = (enabled: boolean) =>
+  Layer.succeed(
+    ClerkSessionVerifier.ClerkSessionVerifier,
+    ClerkSessionVerifier.ClerkSessionVerifier.of({
+      enabled,
+      verify: Effect.fn("test.verify")(function* (token: string) {
+        return enabled && token === "clerk-allowed"
+          ? { userId: "user_allowed1" }
+          : yield* new ClerkSessionVerifier.ClerkSessionInvalidError({});
+      }),
+    }),
+  );
+const makeLayerRoutes = (environmentAuth: ReturnType<typeof layerEnvironmentAuth>) =>
+  HttpApiBuilder.layer(AuthTestApi).pipe(
+    Layer.provide(AuthHttp.layer),
+    Layer.provide(AuthHttp.layerAuthenticatedAuth),
+    Layer.provideMerge(environmentAuth),
+    Layer.provide(layerConfig),
+    Layer.provideMerge(
+      HttpPlatform.layer.pipe(
+        Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+        Layer.provideMerge(Etag.layerWeak),
+      ),
     ),
-  ),
-  Layer.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
-);
+    Layer.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+  );
+const layerRoutes = makeLayerRoutes(layerEnvironmentAuth(clerkVerifier(false)));
+const layerClerkRoutes = makeLayerRoutes(layerEnvironmentAuth(clerkVerifier(true)));
 
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 const postJson = (path: string, body: unknown, headers?: Readonly<Record<string, string>>) =>
@@ -262,6 +281,72 @@ it.live("checks token-endpoint DPoP proofs without writing replay state", () =>
           expect(written).toEqual([]);
         }),
       (environment) => Effect.promise(() => environment.dispose()),
+    );
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+);
+
+it.live("exchanges a Clerk session only with a DPoP proof", () =>
+  Effect.gen(function* () {
+    const random = yield* SecureRandom.SecureRandom;
+    const requestContext = Context.make(SecureRandom.SecureRandom, random).pipe(
+      Context.add(
+        ServerSecretStore.ServerSecretStore,
+        ServerSecretStore.ServerSecretStore.of({
+          get: () => Effect.succeedNone,
+          set: () => Effect.void,
+          create: () => Effect.void,
+          getOrCreateRandom: () => Effect.die("Not used by these routes."),
+          remove: () => Effect.void,
+        }),
+      ),
+    );
+    const url = "http://127.0.0.1/oauth/token";
+    const key = makeDpopKey();
+    const iat = Math.floor((yield* DateTime.now).epochMilliseconds / 1_000);
+    const tokenRequest = (subjectToken: string, proof?: string) =>
+      new Request(url, {
+        method: "POST",
+        headers: { host: "127.0.0.1", ...(proof ? { dpop: proof } : {}) },
+        body: new URLSearchParams({
+          grant_type: AuthTokenExchangeGrantType,
+          subject_token: subjectToken,
+          subject_token_type: AuthClerkSessionTokenType,
+          requested_token_type: AuthAccessTokenType,
+        }),
+      });
+    const proof = () => key.sign({ method: "POST", url, token: "", iat });
+    return yield* Effect.acquireUseRelease(
+      Effect.sync(() => ({
+        configured: HttpRouter.toWebHandler(layerClerkRoutes, { disableLogger: true }),
+        unconfigured: HttpRouter.toWebHandler(layerRoutes, { disableLogger: true }),
+      })),
+      ({ configured, unconfigured }) =>
+        Effect.promise(async () => {
+          const noProof = await configured.handler(tokenRequest("clerk-allowed"), requestContext);
+          expect(noProof.status).toBe(401);
+          expect(noProof.headers.get("www-authenticate")).toBe("DPoP");
+
+          const wrongUser = await configured.handler(
+            tokenRequest("clerk-other", proof()),
+            requestContext,
+          );
+          expect(wrongUser.status).toBe(401);
+
+          const accepted = await configured.handler(
+            tokenRequest("clerk-allowed", proof()),
+            requestContext,
+          );
+          expect(accepted.status).toBe(200);
+          expect(await accepted.json()).toMatchObject({ token_type: "DPoP" });
+
+          const disabled = await unconfigured.handler(
+            tokenRequest("clerk-allowed", proof()),
+            requestContext,
+          );
+          expect(disabled.status).toBe(401);
+        }),
+      ({ configured, unconfigured }) =>
+        Effect.promise(() => Promise.all([configured.dispose(), unconfigured.dispose()])),
     );
   }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
 );

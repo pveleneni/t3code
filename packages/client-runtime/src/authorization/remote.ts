@@ -1,5 +1,6 @@
 import {
   AuthAccessTokenType,
+  AuthClerkSessionTokenType,
   type AuthClientPresentationMetadata,
   AuthEnvironmentBootstrapTokenType,
   AuthTokenExchangeGrantType,
@@ -45,7 +46,10 @@ export const exchangeRemoteDpopAccessToken = Effect.fn(
   readonly httpBaseUrl: string;
   readonly credential: string;
   /** An access token renews its own session on hosts that advertise `accessTokenRenewal`. */
-  readonly credentialType?: typeof AuthEnvironmentBootstrapTokenType | typeof AuthAccessTokenType;
+  readonly credentialType?:
+    | typeof AuthEnvironmentBootstrapTokenType
+    | typeof AuthAccessTokenType
+    | typeof AuthClerkSessionTokenType;
   readonly scopes?: ReadonlyArray<AuthEnvironmentScope>;
   readonly clientMetadata?: AuthClientPresentationMetadata;
   readonly dpopProof: string;

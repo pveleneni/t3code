@@ -1,4 +1,5 @@
 import {
+  AuthClerkSessionTokenType,
   AuthStandardClientScopes,
   EnvironmentId,
   type AuthEnvironmentScope,
@@ -34,6 +35,7 @@ import {
 import * as Onboarding from "./onboarding.ts";
 import {
   prepareBearerConnectionUpdate,
+  prepareClerkRegistration,
   preparePairingRegistration,
   prepareSshRegistration,
 } from "./onboarding.ts";
@@ -599,6 +601,72 @@ describe("connection onboarding", () => {
       ),
     ),
   );
+
+  describe("clerk sign-in", () => {
+    const layerSigner = Layer.succeed(
+      ManagedRelay.ManagedRelayDpopSigner,
+      ManagedRelay.ManagedRelayDpopSigner.of({
+        thumbprint: Effect.succeed("device-key"),
+        createProof: (proof) => Effect.succeed(`proof:${proof.url}`),
+      }),
+    );
+
+    it.effect("exchanges the Clerk session token for a renewable DPoP session", () =>
+      Effect.gen(function* () {
+        const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
+        const registration = yield* prepareClerkRegistration({
+          host: "remote.example.test",
+          clerkSessionToken: "clerk-jwt",
+        }).pipe(Effect.provide(Layer.merge(layerPairingOnboarding(undefined, calls), layerSigner)));
+
+        expect(registration.credential).toMatchObject({
+          _tag: "DpopConnectionCredential",
+          accessToken: "dpop-token",
+        });
+        expect(registration.profile.httpBaseUrl).toBe("https://remote.example.test/");
+        const tokenRequest = calls.find((call) => call.url.endsWith("/oauth/token"));
+        expect(new Headers(tokenRequest?.init.headers).get("dpop")).toBe(
+          "proof:https://remote.example.test/oauth/token",
+        );
+        const body =
+          tokenRequest?.init.body instanceof Uint8Array
+            ? new TextDecoder().decode(tokenRequest.init.body)
+            : String(tokenRequest?.init.body);
+        const params = new URLSearchParams(body);
+        expect(params.get("subject_token")).toBe("clerk-jwt");
+        expect(params.get("subject_token_type")).toBe(AuthClerkSessionTokenType);
+      }),
+    );
+
+    it.effect("never falls back to a bearer session without a device key", () =>
+      Effect.gen(function* () {
+        const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
+        const error = yield* prepareClerkRegistration({
+          host: "remote.example.test",
+          clerkSessionToken: "clerk-jwt",
+        }).pipe(Effect.provide(layerPairingOnboarding(undefined, calls)), Effect.flip);
+
+        expect(error).toMatchObject({ _tag: "ConnectionBlockedError", reason: "configuration" });
+        expect(calls.map((call) => call.url)).toEqual([
+          "https://remote.example.test/.well-known/t3/environment",
+        ]);
+      }),
+    );
+
+    it.effect("shows the server's refusal when the account is not allowed", () =>
+      Effect.gen(function* () {
+        const error = yield* prepareClerkRegistration({
+          host: "remote.example.test",
+          clerkSessionToken: "clerk-jwt",
+        }).pipe(
+          Effect.provide(Layer.merge(layerPairingOnboarding({ failExchange: true }), layerSigner)),
+          Effect.flip,
+        );
+
+        expect(error).toMatchObject({ _tag: "ConnectionBlockedError", reason: "authentication" });
+      }),
+    );
+  });
 
   it.effect("refuses to add a route that reaches a different machine, keeping the code", () =>
     Effect.gen(function* () {

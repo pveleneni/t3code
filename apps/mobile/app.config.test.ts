@@ -58,4 +58,5 @@ it("omits passkey and hosted app deep-link config when unconfigured", async () =
   expect(config.ios?.associatedDomains).toEqual([]);
   expect(config.android?.intentFilters).toEqual([]);
   expect(config.extra?.hostedAppUrl).toBeNull();
+  expect(config.extra?.selfHosted).toEqual({ url: null });
 });

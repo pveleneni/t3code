@@ -23,7 +23,10 @@ import { environmentCatalog } from "../connection/catalog";
 import { createRemoteEnvironmentProjectionAtoms } from "./remote-environment-projections";
 import { serverEnvironment } from "./server";
 import { relayEnvironmentDiscovery } from "./relay";
-import { connectPairingUrl as connectPairingUrlCommand } from "../connection/onboarding";
+import {
+  connectClerkSession as connectClerkSessionCommand,
+  connectPairingUrl as connectPairingUrlCommand,
+} from "../connection/onboarding";
 
 const RELAY_REMOVAL_ACCOUNT_NOTE: Record<Discovery.RelayEnvironmentRegistration, string> = {
   registered: msg(
@@ -72,7 +75,24 @@ export async function pairEnvironment(
     appAtomRegistry.set(connectionPairingUrlAtom, "");
     return { ok: true, error: null };
   }
-  const error = Cause.squash(result.cause);
+  return pairingFailureOutcome(result.cause);
+}
+
+/** Signs in to a self-hosted server with a Clerk session token and saves it. */
+export async function connectClerkEnvironment(input: {
+  readonly host: string;
+  readonly clerkSessionToken: string;
+}): Promise<PairingOutcome> {
+  const result = await runAtomCommand(appAtomRegistry, connectClerkSessionCommand, input, {
+    reportFailure: false,
+  });
+  return AsyncResult.isSuccess(result)
+    ? { ok: true, error: null }
+    : pairingFailureOutcome(result.cause);
+}
+
+function pairingFailureOutcome(cause: Cause.Cause<unknown>): PairingOutcome {
+  const error = Cause.squash(cause);
   const message = errorDisplayMessage(error, m) ?? m(msg("Failed to pair with the environment."));
   if (
     error !== null &&

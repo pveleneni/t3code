@@ -8,6 +8,7 @@ import { FloatingActionButton } from "../../components/ui/FloatingActionButton";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { ScreenContent } from "../../components/ui/ScreenContent";
 import { workspaceUsesColumns, type WorkspaceTab } from "./workspace/workspace-tabs-state";
+import { SelfHostedSignIn } from "../connection/SelfHostedSignIn";
 
 export function WorkspaceEmptyDetail(props: {
   readonly tab?: WorkspaceTab | "settings";
@@ -45,6 +46,7 @@ export function WorkspaceEmptyDetail(props: {
                 />
               }
             />
+            <SelfHostedSignIn />
           </View>
         ) : (
           <View className="max-w-[360px] items-center gap-3">

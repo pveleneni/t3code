@@ -182,6 +182,8 @@ export const AuthTokenExchangeGrantType =
 export const AuthAccessTokenType = "urn:ietf:params:oauth:token-type:access_token" as const;
 export const AuthEnvironmentBootstrapTokenType =
   "urn:t3:params:oauth:token-type:environment-bootstrap" as const;
+/** A Clerk session JWT, accepted only by hosts that allowlist the signed-in Clerk user. */
+export const AuthClerkSessionTokenType = "urn:t3:params:oauth:token-type:clerk-session" as const;
 
 export const ServerAuthDescriptor = Schema.Struct({
   policy: ServerAuthPolicy,
@@ -232,7 +234,11 @@ export const AuthTokenExchangeRequest = Schema.Struct({
   grant_type: Schema.Literal(AuthTokenExchangeGrantType),
   subject_token: TrimmedNonEmptyString,
   /** An access token renews its own session, with a DPoP proof from the key it is bound to. */
-  subject_token_type: Schema.Literals([AuthEnvironmentBootstrapTokenType, AuthAccessTokenType]),
+  subject_token_type: Schema.Literals([
+    AuthEnvironmentBootstrapTokenType,
+    AuthAccessTokenType,
+    AuthClerkSessionTokenType,
+  ]),
   requested_token_type: Schema.Literal(AuthAccessTokenType),
   scope: Schema.optionalKey(TrimmedNonEmptyString),
   client_label: Schema.optionalKey(TrimmedNonEmptyString),

@@ -22,6 +22,9 @@ export interface CloudPublicConfig {
   readonly relay: {
     readonly url: string | null;
   };
+  readonly selfHosted: {
+    readonly url: string | null;
+  };
   readonly observability: {
     readonly tracesUrl: string | null;
     readonly tracesDataset: string | null;
@@ -65,6 +68,9 @@ export function resolveCloudPublicConfig(extra: ExpoExtra = Constants.expoConfig
     relay: {
       url: normalizeSecureRelayUrl(trimNonEmpty(extra?.relay?.url) ?? ""),
     },
+    selfHosted: {
+      url: normalizeSecureUrl(extra?.selfHosted?.url),
+    },
     observability: {
       tracesUrl: normalizeSecureUrl(extra?.observability?.tracesUrl),
       tracesDataset: trimNonEmpty(extra?.observability?.tracesDataset),
@@ -76,6 +82,17 @@ export function resolveCloudPublicConfig(extra: ExpoExtra = Constants.expoConfig
 export function hasCloudPublicConfig(): boolean {
   const config = resolveCloudPublicConfig();
   return Boolean(config.clerk.publishableKey && config.clerk.jwtTemplate && config.relay.url);
+}
+
+/** The server this build signs in to with Clerk, set at build time by a self-hoster. */
+export function resolveSelfHostedConfig(config: CloudPublicConfig = resolveCloudPublicConfig()) {
+  const { url } = config.selfHosted;
+  const { publishableKey, jwtTemplate } = config.clerk;
+  if (!url || !publishableKey) {
+    return null;
+  }
+  const { origin, host } = new URL(url);
+  return { url: origin, host, publishableKey, jwtTemplate };
 }
 
 type Configured<T> = {

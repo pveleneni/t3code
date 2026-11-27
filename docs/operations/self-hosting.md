@@ -102,6 +102,33 @@ The mobile app. `EXPO_PUBLIC_*` values and the Clerk relying party are compiled 
 so a user who wants their own domain and their own Clerk on mobile has to build the app. The
 desktop app and the CLI resolve all of the above at runtime, so they do not.
 
+## Sign in with your own Clerk
+
+A mobile app you build yourself can connect to your server by signing in with your own Clerk
+application (the free tier is enough) instead of scanning a one-time pairing code. The server
+verifies the Clerk session token against your instance's public keys and admits only the Clerk
+user IDs you list; the device then gets the same key-bound, renewable session a pairing link
+gives, listed and revocable in **Settings → Sharing & access**.
+
+1. In the Clerk dashboard, set sign-up mode to **Restricted** and create your own user. Copy its
+   user ID (`user_...`).
+2. On the server, in `~/.t3/.env`:
+
+   ```dotenv
+   T3CODE_CLERK_PUBLISHABLE_KEY=pk_live_...
+   T3CODE_CLERK_ALLOWED_USER_IDS=user_abc123
+   ```
+
+   Without a non-empty allowlist the feature stays off; any signed-in Clerk user is never enough.
+
+3. Build the app with `EXPO_PUBLIC_SELF_HOSTED_URL=https://t3.example.com` and the same
+   `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` (see `.env.build.example`). The app shows
+   **Sign in to t3.example.com** on its first screen and on the add-environment screen.
+
+The URL must be HTTPS, which the [Cloudflare tunnel](./self-hosted-cloudflare-tunnel.md) gives you.
+Removing a user from the allowlist stops new sign-ins; revoke that device's existing session in
+**Settings → Sharing & access**.
+
 ## Verifying an install
 
 ```bash

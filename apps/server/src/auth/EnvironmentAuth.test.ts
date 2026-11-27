@@ -2,6 +2,7 @@ import * as NodePlatformCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   authScopeResponse,
+  AuthStandardClientScopes,
   AuthAdministrativeClientScopes,
   connectDeviceVerificationCode,
 } from "@t3tools/contracts";
@@ -16,6 +17,7 @@ import * as ServerConfig from "../config.ts";
 import { makeDpopKey } from "./dpop.testkit.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ClerkSessionVerifier from "./ClerkSessionVerifier.ts";
 import * as EnvironmentAuth from "./EnvironmentAuth.ts";
 import * as PairingGrantStore from "./PairingGrantStore.ts";
 
@@ -1208,6 +1210,135 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodePlatformCrypto.layer))(
       }).pipe(
         Effect.provide(layerEnvironmentAuth({ desktopBootstrapToken: "desktop-bootstrap-token" })),
       ),
+    );
+  },
+);
+
+const layerClerkEnvironmentAuth = (policy?: Parameters<typeof ManagedPolicy.layerTest>[0]) =>
+  EnvironmentAuth.layerWithoutClerk.pipe(
+    Layer.provideMerge(
+      Layer.succeed(
+        ClerkSessionVerifier.ClerkSessionVerifier,
+        ClerkSessionVerifier.ClerkSessionVerifier.of({
+          enabled: true,
+          verify: Effect.fn("test.verify")(function* (token: string) {
+            return token === "clerk-allowed"
+              ? { userId: "user_allowed1" }
+              : yield* new ClerkSessionVerifier.ClerkSessionInvalidError({});
+          }),
+        }),
+      ),
+    ),
+    Layer.provide(ManagedPolicy.layerTest(policy)),
+    Layer.provideMerge(SqlitePersistence.layerMemory),
+    Layer.provide(ServerSecretStore.layer),
+    Layer.provide(ServerEnvironment.layerIdentity),
+    Layer.provide(layerServerConfig()),
+  );
+
+it.layer(Layer.mergeAll(NodeServices.layer, NodePlatformCrypto.layer))(
+  "EnvironmentAuth Clerk sign-in",
+  (it) => {
+    it.effect("issues a renewable DPoP session with the standard client scopes", () =>
+      Effect.gen(function* () {
+        const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+        const sessions = yield* SessionStore.SessionStore;
+        const key = makeDpopKey();
+        const issued = yield* serverAuth.exchangeClerkSessionForAccessToken(
+          "clerk-allowed",
+          undefined,
+          requestMetadata,
+          key.thumbprint,
+        );
+        expect(issued.token_type).toBe("DPoP");
+        expect(issued.expires_in).toBe(60 * 60);
+        const session = yield* sessions.verify(issued.access_token);
+        expect(session.subject).toBe(EnvironmentAuth.CLERK_DIRECT_SUBJECT);
+        expect(session.method).toBe("dpop-access-token");
+        expect(session.scopes).toEqual(AuthStandardClientScopes);
+        expect(
+          (yield* sessions.listActive()).some((active) => active.sessionId === session.sessionId),
+        ).toBe(true);
+
+        yield* TestClock.adjust("2 days");
+        const renewed = yield* serverAuth.renewAccessToken(
+          issued.access_token,
+          key.thumbprint,
+          Effect.void,
+        );
+        expect((yield* sessions.verify(renewed.access_token)).sessionId).toBe(session.sessionId);
+
+        const narrowed = yield* serverAuth.exchangeClerkSessionForAccessToken(
+          "clerk-allowed",
+          ["orchestration:read"],
+          requestMetadata,
+          key.thumbprint,
+        );
+        expect(narrowed.scope).toBe("orchestration:read");
+      }).pipe(Effect.provide(layerClerkEnvironmentAuth())),
+    );
+
+    it.effect("refuses an unverified Clerk session and a scope outside the standard grant", () =>
+      Effect.gen(function* () {
+        const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+        const key = makeDpopKey();
+        const rejected = yield* serverAuth
+          .exchangeClerkSessionForAccessToken(
+            "clerk-other",
+            undefined,
+            requestMetadata,
+            key.thumbprint,
+          )
+          .pipe(Effect.flip);
+        expect(rejected._tag).toBe("ServerAuthInvalidCredentialError");
+        const unscoped = yield* serverAuth
+          .exchangeClerkSessionForAccessToken(
+            "clerk-allowed",
+            ["relay:configure"],
+            requestMetadata,
+            key.thumbprint,
+          )
+          .pipe(Effect.flip);
+        expect(unscoped._tag).toBe("ServerAuthScopeNotGrantedError");
+      }).pipe(Effect.provide(layerClerkEnvironmentAuth())),
+    );
+
+    it.effect("refuses Clerk sessions when the managed policy keeps clients off this machine", () =>
+      Effect.gen(function* () {
+        const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+        const rejected = yield* serverAuth
+          .exchangeClerkSessionForAccessToken(
+            "clerk-allowed",
+            undefined,
+            requestMetadata,
+            makeDpopKey().thumbprint,
+          )
+          .pipe(Effect.flip);
+        expect(rejected._tag).toBe("ServerAuthInvalidCredentialError");
+      }).pipe(
+        Effect.provide(
+          layerClerkEnvironmentAuth({
+            schemaVersion: 1,
+            organization: "Example Corp",
+            limits: { clients: ["desktop", "local-browser"] },
+          }),
+        ),
+      ),
+    );
+
+    it.effect("refuses Clerk sessions when sign-in is not configured", () =>
+      Effect.gen(function* () {
+        const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+        const rejected = yield* serverAuth
+          .exchangeClerkSessionForAccessToken(
+            "clerk-allowed",
+            undefined,
+            requestMetadata,
+            makeDpopKey().thumbprint,
+          )
+          .pipe(Effect.flip);
+        expect(rejected._tag).toBe("ServerAuthInvalidCredentialError");
+      }).pipe(Effect.provide(layerEnvironmentAuth())),
     );
   },
 );

@@ -28,6 +28,16 @@ export const connectPairingUrl = createRuntimeCommand(connectionAtomRuntime, {
     ),
 });
 
+export const connectClerkSession = createRuntimeCommand(connectionAtomRuntime, {
+  label: "mobile:connection:connect-clerk-session",
+  scheduler: onboardingScheduler,
+  concurrency: { mode: "singleFlight", key: (input: { readonly host: string }) => input.host },
+  execute: (input: { readonly host: string; readonly clerkSessionToken: string }) =>
+    ConnectionOnboarding.ConnectionOnboarding.pipe(
+      Effect.flatMap((onboarding) => onboarding.registerClerk(input)),
+    ),
+});
+
 export const updateBearerConnection = createRuntimeCommand(connectionAtomRuntime, {
   label: "mobile:connection:update-bearer",
   scheduler: onboardingScheduler,

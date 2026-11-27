@@ -125,6 +125,14 @@ const hostedAppOrigin = normalizeHostedAppOrigin(
   repoEnv.T3CODE_HOSTED_APP_URL || repoEnv.EXPO_PUBLIC_HOSTED_APP_URL,
 );
 const HOSTED_APP_HOST = hostedAppOrigin ? new URL(hostedAppOrigin).host : null;
+const selfHostedUrl = (() => {
+  try {
+    const url = new URL(repoEnv.EXPO_PUBLIC_SELF_HOSTED_URL?.trim() ?? "");
+    return url.protocol === "https:" ? url.origin : null;
+  } catch {
+    return null;
+  }
+})();
 const iosBundleIdentifier = isIosPersonalTeamBuild
   ? personalTeamBundleIdentifier!
   : variant.iosBundleIdentifier;
@@ -491,6 +499,7 @@ const config: ExpoConfig = {
       jwtTemplate: repoEnv.EXPO_PUBLIC_CLERK_JWT_TEMPLATE ?? null,
     },
     hostedAppUrl: hostedAppOrigin,
+    selfHosted: { url: selfHostedUrl },
     // Clerk reads these exact names at prebuild. Omit unset values: manifest null becomes truthy {}.
     EXPO_PUBLIC_CLERK_GOOGLE_WEB_CLIENT_ID: repoEnv.EXPO_PUBLIC_CLERK_GOOGLE_WEB_CLIENT_ID,
     EXPO_PUBLIC_CLERK_GOOGLE_IOS_CLIENT_ID: repoEnv.EXPO_PUBLIC_CLERK_GOOGLE_IOS_CLIENT_ID,

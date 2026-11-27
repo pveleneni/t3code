@@ -1,6 +1,11 @@
 import { msg } from "gt-i18n";
 import { detailFromError, translatableDetail } from "../errors/translatable.ts";
-import type { DesktopSshEnvironmentTarget, EnvironmentId } from "@t3tools/contracts";
+import {
+  AuthClerkSessionTokenType,
+  AuthEnvironmentBootstrapTokenType,
+  type DesktopSshEnvironmentTarget,
+  type EnvironmentId,
+} from "@t3tools/contracts";
 import { resolveRemotePairingTarget } from "@t3tools/shared/remote";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -74,6 +79,12 @@ export class ConnectionOnboarding extends Context.Service<
       EnvironmentId,
       ConnectionAttemptError | Persistence.ConnectionPersistenceError
     >;
+    readonly registerClerk: (
+      input: ClerkConnectionInput,
+    ) => Effect.Effect<
+      EnvironmentId,
+      ConnectionAttemptError | Persistence.ConnectionPersistenceError
+    >;
     readonly registerSsh: (
       input: SshConnectionInput,
     ) => Effect.Effect<
@@ -122,46 +133,93 @@ function differentMachineError(label: string) {
   });
 }
 
+interface BearerRouteInput {
+  readonly target: { readonly httpBaseUrl: string; readonly wsBaseUrl: string };
+  readonly expectedEnvironmentId?: EnvironmentId | undefined;
+}
+
+const prepareBearerRoute = Effect.fn("clientRuntime.connection.onboarding.prepareBearerRoute")(
+  function* (input: BearerRouteInput) {
+    const { target } = input;
+    const descriptor = yield* fetchRemoteEnvironmentDescriptor({
+      httpBaseUrl: target.httpBaseUrl,
+    }).pipe(Effect.mapError(mapRemoteEnvironmentError));
+    // Checked before redeeming the credential, so a wrong link is not spent.
+    if (
+      input.expectedEnvironmentId !== undefined &&
+      descriptor.environmentId !== input.expectedEnvironmentId
+    ) {
+      return yield* differentMachineError(descriptor.label);
+    }
+    const connectionId = bearerConnectionId(descriptor.environmentId, target.httpBaseUrl);
+    const route = {
+      target: new BearerConnectionTarget({
+        environmentId: descriptor.environmentId,
+        label: descriptor.label,
+        connectionId,
+      }),
+      profile: new BearerConnectionProfile({
+        connectionId,
+        environmentId: descriptor.environmentId,
+        label: descriptor.label,
+        httpBaseUrl: target.httpBaseUrl,
+        wsBaseUrl: target.wsBaseUrl,
+      }),
+    };
+    // The registry checks again under its lease; this early check keeps a refused code unspent.
+    if (input.expectedEnvironmentId === undefined) {
+      const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+      yield* registry.assertKnownAddress({ ...route, profile: Option.some(route.profile) });
+    }
+    const compatibilityError = orchestrationProtocolCompatibilityError(descriptor);
+    // An outdated server is still saved so it can be updated from this client.
+    if (compatibilityError !== null && compatibilityError.serverUpdateRequired !== true) {
+      return yield* compatibilityError;
+    }
+    return { descriptor, route };
+  },
+);
+
+const exchangeForDpopRegistration = Effect.fn(
+  "clientRuntime.connection.onboarding.exchangeForDpopRegistration",
+)(function* (input: {
+  readonly httpBaseUrl: string;
+  readonly credential: string;
+  readonly credentialType:
+    | typeof AuthClerkSessionTokenType
+    | typeof AuthEnvironmentBootstrapTokenType;
+  readonly dpopProof: string;
+  readonly route: {
+    readonly target: BearerConnectionTarget;
+    readonly profile: BearerConnectionProfile;
+  };
+}) {
+  const presentation = yield* ClientCapabilities.ClientPresentation;
+  const access = yield* exchangeRemoteDpopAccessToken({
+    httpBaseUrl: input.httpBaseUrl,
+    credential: input.credential,
+    credentialType: input.credentialType,
+    clientMetadata: presentation.metadata,
+    dpopProof: input.dpopProof,
+  }).pipe(Effect.mapError(mapRemoteEnvironmentError));
+  return new BearerConnectionRegistration({
+    ...input.route,
+    credential: new DpopConnectionCredential({
+      accessToken: access.access_token,
+      expiresAtEpochMs: (yield* Clock.currentTimeMillis) + access.expires_in * 1_000,
+    }),
+  });
+});
+
 export const preparePairingRegistration = Effect.fn(
   "clientRuntime.connection.onboarding.preparePairingRegistration",
 )(function* (input: PairingConnectionInput) {
   const target = yield* resolvePairingTarget(input);
   const presentation = yield* ClientCapabilities.ClientPresentation;
-  const descriptor = yield* fetchRemoteEnvironmentDescriptor({
-    httpBaseUrl: target.httpBaseUrl,
-  }).pipe(Effect.mapError(mapRemoteEnvironmentError));
-  // Checked before redeeming the one-time code, so a wrong link is not spent.
-  if (
-    input.expectedEnvironmentId !== undefined &&
-    descriptor.environmentId !== input.expectedEnvironmentId
-  ) {
-    return yield* differentMachineError(descriptor.label);
-  }
-  const connectionId = bearerConnectionId(descriptor.environmentId, target.httpBaseUrl);
-  const route = {
-    target: new BearerConnectionTarget({
-      environmentId: descriptor.environmentId,
-      label: descriptor.label,
-      connectionId,
-    }),
-    profile: new BearerConnectionProfile({
-      connectionId,
-      environmentId: descriptor.environmentId,
-      label: descriptor.label,
-      httpBaseUrl: target.httpBaseUrl,
-      wsBaseUrl: target.wsBaseUrl,
-    }),
-  };
-  // The registry checks again under its lease; this early check keeps a refused code unspent.
-  if (input.expectedEnvironmentId === undefined) {
-    const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
-    yield* registry.assertKnownAddress({ ...route, profile: Option.some(route.profile) });
-  }
-  const compatibilityError = orchestrationProtocolCompatibilityError(descriptor);
-  // An outdated server is still saved so it can be updated from this client.
-  if (compatibilityError !== null && compatibilityError.serverUpdateRequired !== true) {
-    return yield* compatibilityError;
-  }
+  const { descriptor, route } = yield* prepareBearerRoute({
+    target,
+    expectedEnvironmentId: input.expectedEnvironmentId,
+  });
   // A key-bound session renews itself, but only on a host that can renew it. The proof is made
   // before the one-time code is sent, so a device that cannot sign keeps the code for bearer.
   const signer = yield* Effect.serviceOption(ManagedRelay.ManagedRelayDpopSigner);
@@ -175,18 +233,12 @@ export const preparePairingRegistration = Effect.fn(
           .pipe(Effect.option)
       : Option.none<string>();
   if (Option.isSome(dpopProof)) {
-    const access = yield* exchangeRemoteDpopAccessToken({
+    return yield* exchangeForDpopRegistration({
       httpBaseUrl: target.httpBaseUrl,
       credential: target.credential,
-      clientMetadata: presentation.metadata,
+      credentialType: AuthEnvironmentBootstrapTokenType,
       dpopProof: dpopProof.value,
-    }).pipe(Effect.mapError(mapRemoteEnvironmentError));
-    return new BearerConnectionRegistration({
-      ...route,
-      credential: new DpopConnectionCredential({
-        accessToken: access.access_token,
-        expiresAtEpochMs: (yield* Clock.currentTimeMillis) + access.expires_in * 1_000,
-      }),
+      route,
     });
   }
   const access = yield* bootstrapRemoteBearerSession({
@@ -203,20 +255,75 @@ export const preparePairingRegistration = Effect.fn(
   });
 });
 
+export interface ClerkConnectionInput {
+  readonly host: string;
+  readonly clerkSessionToken: string;
+}
+
+const clerkDpopUnavailableError = () =>
+  new ConnectionBlockedError({
+    reason: "configuration",
+    ...translatableDetail(
+      msg("This device cannot sign in with an account because it has no device key."),
+    ),
+  });
+
+export const prepareClerkRegistration = Effect.fn(
+  "clientRuntime.connection.onboarding.prepareClerkRegistration",
+)(function* (input: ClerkConnectionInput) {
+  // Resolved like a pairing target so a bare host or a full URL normalizes the same way.
+  const { httpBaseUrl, wsBaseUrl } = yield* resolvePairingTarget({
+    host: input.host,
+    pairingCode: input.clerkSessionToken,
+  });
+  const { route } = yield* prepareBearerRoute({
+    target: { httpBaseUrl, wsBaseUrl },
+  });
+  const signer = yield* Effect.serviceOption(ManagedRelay.ManagedRelayDpopSigner);
+  if (Option.isNone(signer)) {
+    return yield* clerkDpopUnavailableError();
+  }
+  const dpopProof = yield* signer.value
+    .createProof({
+      method: "POST",
+      url: environmentEndpointUrl(httpBaseUrl, "/oauth/token"),
+    })
+    .pipe(Effect.mapError(clerkDpopUnavailableError));
+  return yield* exchangeForDpopRegistration({
+    httpBaseUrl,
+    credential: input.clerkSessionToken,
+    credentialType: AuthClerkSessionTokenType,
+    dpopProof,
+    route,
+  });
+});
+
+const saveRegistration = Effect.fn("clientRuntime.connection.onboarding.saveRegistration")(
+  function* (registration: BearerConnectionRegistration, knownAddressOnly: boolean) {
+    const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+    if (!(yield* registry.register(registration, { knownAddressOnly }))) {
+      return registration.target.environmentId;
+    }
+    yield* registry.setCompatibility(registration.target.environmentId, null);
+    yield* registry
+      .setEnabled(registration.target.environmentId, true)
+      .pipe(Effect.catchTags({ EnvironmentNotRegisteredError: () => Effect.void }));
+    return registration.target.environmentId;
+  },
+);
+
 const registerPairingConnection = Effect.fn(
   "clientRuntime.connection.onboarding.registerPairingConnection",
 )(function* (input: PairingConnectionInput) {
   const registration = yield* preparePairingRegistration(input);
-  const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
-  const knownAddressOnly = input.expectedEnvironmentId === undefined;
-  if (!(yield* registry.register(registration, { knownAddressOnly }))) {
-    return registration.target.environmentId;
-  }
-  yield* registry.setCompatibility(registration.target.environmentId, null);
-  yield* registry
-    .setEnabled(registration.target.environmentId, true)
-    .pipe(Effect.catchTags({ EnvironmentNotRegisteredError: () => Effect.void }));
-  return registration.target.environmentId;
+  return yield* saveRegistration(registration, input.expectedEnvironmentId === undefined);
+});
+
+const registerClerkConnection = Effect.fn(
+  "clientRuntime.connection.onboarding.registerClerkConnection",
+)(function* (input: ClerkConnectionInput) {
+  const registration = yield* prepareClerkRegistration(input);
+  return yield* saveRegistration(registration, true);
 });
 
 const REACHABILITY_TIMEOUT_MS = 6_000;
@@ -385,6 +492,14 @@ export const make = Effect.gen(function* () {
     registerPairing: Effect.fnUntraced(
       function* (input) {
         return yield* registerPairingConnection(input);
+      },
+      Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, registry),
+      Effect.provideService(ClientCapabilities.ClientPresentation, presentation),
+      Effect.provideService(HttpClient.HttpClient, httpClient),
+    ),
+    registerClerk: Effect.fnUntraced(
+      function* (input) {
+        return yield* registerClerkConnection(input);
       },
       Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, registry),
       Effect.provideService(ClientCapabilities.ClientPresentation, presentation),

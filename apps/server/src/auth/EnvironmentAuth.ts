@@ -43,6 +43,7 @@ import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ServerConfig from "../config.ts";
 import * as EnvironmentAuthPolicy from "./EnvironmentAuthPolicy.ts";
+import * as ClerkSessionVerifier from "./ClerkSessionVerifier.ts";
 import * as PairingGrantStore from "./PairingGrantStore.ts";
 import * as ServerSecretStore from "./ServerSecretStore.ts";
 import * as SessionStore from "./SessionStore.ts";
@@ -95,6 +96,7 @@ const PEER_LINK_RENEWAL_STEP = Duration.days(1);
 const RENEWABLE_ACCESS_TOKEN_TTL = Duration.hours(1);
 const RENEWABLE_SESSION_WINDOW = Duration.days(30);
 const PAIRING_LINK_SUBJECT = "one-time-token";
+export const CLERK_DIRECT_SUBJECT = "clerk-direct-sign-in";
 
 export interface McpClientSession {
   readonly sessionId: AuthSessionId;
@@ -533,6 +535,15 @@ export class EnvironmentAuth extends Context.Service<
       | ServerAuthConnectApprovalPendingError
       | ServerAuthInternalError
     >;
+    readonly exchangeClerkSessionForAccessToken: (
+      clerkSessionToken: string,
+      requestedScopes: ReadonlyArray<AuthEnvironmentScope> | undefined,
+      requestMetadata: AuthClientMetadata,
+      proofKeyThumbprint: string,
+    ) => Effect.Effect<
+      AuthAccessTokenResult,
+      ServerAuthInvalidCredentialError | ServerAuthScopeNotGrantedError | ServerAuthInternalError
+    >;
     readonly renewAccessToken: (
       accessToken: string,
       proofKeyThumbprint: string,
@@ -828,6 +839,7 @@ export const make = Effect.gen(function* () {
   const descriptor = yield* policy.getDescriptor();
   const config = yield* ServerConfig.ServerConfig;
   const managedPolicy = yield* ManagedPolicy.ManagedPolicy;
+  const clerkSessions = yield* ClerkSessionVerifier.ClerkSessionVerifier;
   const devAuth = resolveReusableDevAuth(config);
 
   const authenticateToken = (
@@ -1210,6 +1222,47 @@ export const make = Effect.gen(function* () {
         Effect.withSpan("EnvironmentAuth.exchangeBootstrapCredentialForAccessToken"),
       );
     };
+
+  const exchangeClerkSessionForAccessToken: EnvironmentAuth["Service"]["exchangeClerkSessionForAccessToken"] =
+    Effect.fn("EnvironmentAuth.exchangeClerkSessionForAccessToken")(
+      function* (clerkSessionToken, requestedScopes, requestMetadata, proofKeyThumbprint) {
+        const invalid = new ServerAuthInvalidCredentialError({
+          diagnostic: "Clerk sign-in is unavailable or the user is not allowed.",
+        });
+        if (!clerkSessions.enabled || !ManagedLimits.allowsRemoteClients(managedPolicy)) {
+          return yield* invalid;
+        }
+        const standardScopes: ReadonlyArray<AuthEnvironmentScope> = AuthStandardClientScopes;
+        const grantedScopes =
+          requestedScopes === undefined
+            ? standardScopes
+            : [...new Set(requestedScopes)].filter((scope) => standardScopes.includes(scope));
+        if (grantedScopes.length === 0) {
+          return yield* new ServerAuthScopeNotGrantedError({});
+        }
+        return yield* Effect.gen(function* () {
+          yield* clerkSessions
+            .verify(clerkSessionToken)
+            .pipe(Effect.mapError((cause) => new ServerAuthInvalidCredentialError({ cause })));
+          const session = yield* sessions
+            .issue({
+              method: "dpop-access-token",
+              subject: CLERK_DIRECT_SUBJECT,
+              scopes: grantedScopes,
+              proofKeyThumbprint,
+              ttl: RENEWABLE_ACCESS_TOKEN_TTL,
+              renewalWindow: RENEWABLE_SESSION_WINDOW,
+              client: requestMetadata,
+            })
+            .pipe(
+              Effect.mapError(
+                (cause) => new ServerAuthAuthenticatedAccessTokenIssueError({ cause }),
+              ),
+            );
+          return yield* toAccessTokenResult(session);
+        }).pipe(connectTrustLock.withPermits(1));
+      },
+    );
 
   const toPairingCredential = (issued: IssuedPairingLink): AuthPairingCredentialResult => ({
     id: issued.id,
@@ -1771,6 +1824,7 @@ export const make = Effect.gen(function* () {
     getSessionState,
     createBrowserSession,
     exchangeBootstrapCredentialForAccessToken,
+    exchangeClerkSessionForAccessToken,
     renewAccessToken,
     createPairingLink,
     issueConnectCredential,
@@ -1832,7 +1886,10 @@ const revokePairedClientsThePolicyDisallows = Effect.fn(
 ) {
   const remoteAllowed = ManagedLimits.allowsRemoteClients(policy);
   const disallowed = new Set<string>();
-  if (!remoteAllowed) disallowed.add(LINK_PAIRED_SUBJECTS.link);
+  if (!remoteAllowed) {
+    disallowed.add(LINK_PAIRED_SUBJECTS.link);
+    disallowed.add(CLERK_DIRECT_SUBJECT);
+  }
   if (!ManagedLimits.allowsConnect(policy)) disallowed.add(LINK_PAIRED_SUBJECTS.connect);
   if (disallowed.size === 0) return;
   const sessions = (yield* stores.sessions.listActive()).filter(
@@ -1862,11 +1919,14 @@ const revokePairedClientsThePolicyDisallows = Effect.fn(
   }
 });
 
-export const layer = Layer.effect(EnvironmentAuth, make).pipe(
+/** Leaves the Clerk verifier to the caller, so tests can supply their own. */
+export const layerWithoutClerk = Layer.effect(EnvironmentAuth, make).pipe(
   Layer.provideMerge(PairingGrantStore.layer),
   Layer.provideMerge(SessionStore.layer),
   Layer.provideMerge(EnvironmentAuthPolicy.layer),
 );
+
+export const layer = layerWithoutClerk.pipe(Layer.provideMerge(ClerkSessionVerifier.layer));
 
 const layerStorage = Layer.mergeAll(ServerSecretStore.layer, SqlitePersistence.layerCliConfig);
 

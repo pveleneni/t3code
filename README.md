@@ -36,7 +36,9 @@ The Cloudflare token needs **Tunnel:Edit** and **DNS:Edit** on the zone; with al
 
 ### Mobile apps
 
-The iOS and Android apps from the official stores cannot be pointed at this fork: `EXPO_PUBLIC_*` values and the Clerk passkey relying party are compiled into the app, so using your own domain and auth requires building your own app. Mobile builds also need developer credentials — an Apple Developer Program membership for iOS signing and entitlements, and a Google Play developer account to publish on Android. You are free to fork this repository and publish your own app under your own branding; see [mobile build setup](./apps/mobile/README.md) and [TRADEMARK.md](./TRADEMARK.md).
+The official iOS and Android apps can pair with your server directly: run `t3 pair` and scan the code. They cannot use your own Clerk or T3 Connect, because `EXPO_PUBLIC_*` values and the Clerk passkey relying party are compiled into the app.
+
+Your own app build can sign in to your server with your own Clerk account instead of a pairing code: set `EXPO_PUBLIC_SELF_HOSTED_URL` and `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` when building it, and `T3CODE_CLERK_ALLOWED_USER_IDS` on the server. See [Sign in with your own Clerk](./docs/operations/self-hosting.md#sign-in-with-your-own-clerk). Mobile builds need developer credentials — an Apple Developer Program membership for iOS signing and entitlements, and a Google Play developer account to publish on Android. You are free to fork this repository and publish your own app under your own branding; see [mobile build setup](./apps/mobile/README.md) and [TRADEMARK.md](./TRADEMARK.md).
 
 ### Reference
 
@@ -46,7 +48,7 @@ The iOS and Android apps from the official stores cannot be pointed at this fork
 
 ---
 
-*T3 README starts here — everything below is unchanged upstream content.*
+_T3 README starts here — everything below is unchanged upstream content._
 
 <p align="center">
   <a href="https://t3.codes">

@@ -8,7 +8,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 
-import { hasCloudPublicConfig } from "../cloud/publicConfig";
+import { hasCloudPublicConfig, resolveSelfHostedConfig } from "../cloud/publicConfig";
 import { T3ConnectProfilePage } from "../cloud/T3ConnectProfilePage";
 
 const USER_PROFILE_CUSTOM_PAGES = [
@@ -20,14 +20,18 @@ const USER_PROFILE_CUSTOM_PAGES = [
   },
 ] satisfies UserProfileCustomPage[];
 
-// Without cloud config the app has no entry point here and appLinking drops the deep link.
+// Without cloud or self-hosted config the app has no entry point here and appLinking drops the deep link.
 export function SettingsAuthRouteScreen() {
-  return hasCloudPublicConfig() ? <ConfiguredSettingsAuthRouteScreen /> : null;
+  return hasCloudPublicConfig() || resolveSelfHostedConfig() ? (
+    <ConfiguredSettingsAuthRouteScreen />
+  ) : null;
 }
 
 function ConfiguredSettingsAuthRouteScreen() {
   const { isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
   const navigation = useNavigation();
+  // Self-hosted builds sign in here only to return to the connect action.
+  const signInOnly = !hasCloudPublicConfig();
   const handleHostBack = () => navigation.goBack();
   // Once signed in, stay on the profile view so signing out pops back instead of
   // flashing the sign-in form.
@@ -38,15 +42,15 @@ function ConfiguredSettingsAuthRouteScreen() {
   // and the T3 Connect page can both sign out), so this follows that store.
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- pops the navigator when Clerk's auth store reports a sign-out from the profile view or Connect page
   useEffect(() => {
-    if (hasBeenSignedIn && isLoaded && isSignedIn === false) {
+    if (signInOnly ? isSignedIn === true : hasBeenSignedIn && isLoaded && isSignedIn === false) {
       navigation.goBack();
     }
-  }, [hasBeenSignedIn, isLoaded, isSignedIn, navigation]);
+  }, [hasBeenSignedIn, isLoaded, isSignedIn, navigation, signInOnly]);
 
   return (
     <View collapsable={false} className="flex-1 overflow-hidden bg-sheet">
       {isLoaded ? (
-        hasBeenSignedIn ? (
+        hasBeenSignedIn && !signInOnly ? (
           <UserProfileView
             customPages={USER_PROFILE_CUSTOM_PAGES}
             isDismissible={false}

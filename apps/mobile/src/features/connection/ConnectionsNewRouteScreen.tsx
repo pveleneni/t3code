@@ -28,6 +28,7 @@ import { buildPairingUrl, extractPairingUrlFromQrPayload, parsePairingUrl } from
 import { useRemoteConnections } from "../../state/use-remote-environment-registry";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { hasCloudPublicConfig } from "../cloud/publicConfig";
+import { SelfHostedSignIn } from "./SelfHostedSignIn";
 import { CloudEnvironmentRows } from "./CloudEnvironmentRows";
 import {
   autoConnectReport,
@@ -173,6 +174,16 @@ function PairingForm({
     }
   };
 
+  const leaveAfterConnect = () => {
+    // Replacing with Home would nest it inside any sheet below; return to the opener.
+    if (!navigation.canGoBack()) {
+      navigation.dispatch(StackActions.replace("Home"));
+    } else {
+      // Added from the Settings list, the new environment shows on Environments.
+      leaveSettingsPage(navigation, workspaceHasColumns(), "SettingsEnvironments");
+    }
+  };
+
   const handleSubmit = async () => {
     const pairingUrl = buildPairingUrl(hostInput, codeInput);
     setOwnAttempt(true);
@@ -187,15 +198,7 @@ function PairingForm({
         ? Haptics.NotificationFeedbackType.Success
         : Haptics.NotificationFeedbackType.Error,
     );
-    if (outcome.ok) {
-      // Replacing with Home would nest it inside any sheet below; return to the opener.
-      if (!navigation.canGoBack()) {
-        navigation.dispatch(StackActions.replace("Home"));
-      } else {
-        // Added from the Settings list, the new environment shows on Environments.
-        leaveSettingsPage(navigation, workspaceHasColumns(), "SettingsEnvironments");
-      }
-    }
+    if (outcome.ok) leaveAfterConnect();
   };
 
   return (
@@ -233,6 +236,7 @@ function PairingForm({
         }}
       >
         <View collapsable={false} className="gap-6.5">
+          {linked ? null : <SelfHostedSignIn onConnected={leaveAfterConnect} />}
           <PairingScanCard
             cameraActive={cameraPermission?.granted === true && screenFocused && !scanComplete}
             onScan={handleQrScan}

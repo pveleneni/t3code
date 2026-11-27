@@ -2,6 +2,7 @@ import {
   authScopeRequiredResponse,
   AuthAccessTokenType,
   AuthAccessWriteScope,
+  AuthClerkSessionTokenType,
   AuthStandardClientScopes,
   AuthGrantScope,
   EnvironmentAuthInvalidError,
@@ -421,6 +422,27 @@ export const layer = HttpApiBuilder.group(
                 args.payload.subject_token,
                 proof.thumbprint,
                 proof.consume,
+              );
+            }
+            if (args.payload.subject_token_type === AuthClerkSessionTokenType) {
+              if (!proof) {
+                yield* appendDpopChallengeHeader;
+                return yield* failEnvironmentAuthInvalid("invalid_credential");
+              }
+              return yield* serverAuth.exchangeClerkSessionForAccessToken(
+                args.payload.subject_token,
+                requestedScopes,
+                deriveAuthClientMetadata({
+                  request,
+                  presented: {
+                    ...(args.payload.client_label ? { label: args.payload.client_label } : {}),
+                    ...(args.payload.client_device_type
+                      ? { deviceType: args.payload.client_device_type }
+                      : {}),
+                    ...(args.payload.client_os ? { os: args.payload.client_os } : {}),
+                  },
+                }),
+                proof.thumbprint,
               );
             }
             return yield* serverAuth.exchangeBootstrapCredentialForAccessToken(
